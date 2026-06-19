@@ -2,22 +2,28 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hmac
 import ipaddress
 import json
 import os
 import platform
 import re
-import resource
 import shutil
 import socket
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime
 from collections import deque
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, parse_qs
+
+try:
+    import resource
+except ImportError:
+    resource = None
 
 from aiohttp import web
 
@@ -61,7 +67,7 @@ DEFAULT_UI = {
 ALLOWED_LOG_SOURCES = {"all", "astrbot", "live", "stream"}
 
 SECRET_KEY_RE = re.compile(
-    r"(?i)(api[_-]?key|access[_-]?token|authorization|bearer|secret|password|passwd|token|key)"
+    r"(?i)(?<![\w])(api[_-]?key|access[_-]?token|authorization|bearer|secret|password|passwd|token|key)(?![\w])"
 )
 SECRET_VALUE_RE = re.compile(
     r"(?i)\b("
@@ -791,6 +797,7 @@ class ObserverPanelPlugin(Star):
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
         self._last_cpu_times: tuple[int, int] | None = _read_cpu_times()
+        self._cpu_lock = threading.Lock()
         self._log_tail_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
         self._log_stats_cache: dict[str, Any] = {}
         self._started_at = time.time()
@@ -922,7 +929,7 @@ class ObserverPanelPlugin(Star):
             if header.lower().startswith("bearer "):
                 supplied = header[7:].strip()
 
-        if supplied != token:
+        if not hmac.compare_digest(supplied, token):
             if request.path.startswith("/api/"):
                 return _json_response({"ok": False, "error": "未授权访问"}, status=401)
             return web.Response(status=401, text="未授权访问")
@@ -1012,7 +1019,7 @@ class ObserverPanelPlugin(Star):
         return _json_response({"ok": True, "data": cfg, "now": _now_ms()})
 
     async def _handle_summary(self, request: web.Request) -> web.Response:
-        astrbot = self._collect_astrbot()
+        astrbot = await asyncio.to_thread(self._collect_astrbot)
         system = await asyncio.to_thread(self._collect_system, compact=True)
         logs = await self._collect_log_stats()
         diagnostics = self._build_diagnostics(astrbot, system, logs)
@@ -1050,7 +1057,7 @@ class ObserverPanelPlugin(Star):
         return _json_response({"ok": True, "data": data, "now": _now_ms()})
 
     async def _handle_astrbot(self, request: web.Request) -> web.Response:
-        return _json_response({"ok": True, "data": self._collect_astrbot(), "now": _now_ms()})
+        return _json_response({"ok": True, "data": await asyncio.to_thread(self._collect_astrbot), "now": _now_ms()})
 
     async def _handle_logs(self, request: web.Request) -> web.Response:
         source = request.query.get("source", "all")
@@ -1510,13 +1517,17 @@ class ObserverPanelPlugin(Star):
     def _collect_system(self, *, compact: bool = False) -> dict[str, Any]:
         cpu_now = _read_cpu_times()
         cpu_percent: float | None = None
-        if cpu_now and self._last_cpu_times:
-            total_delta = cpu_now[0] - self._last_cpu_times[0]
-            idle_delta = cpu_now[1] - self._last_cpu_times[1]
-            if total_delta > 0:
-                cpu_percent = round(max(0.0, min(100.0, (1 - idle_delta / total_delta) * 100)), 2)
-        if cpu_now:
-            self._last_cpu_times = cpu_now
+        # _collect_system 通过 asyncio.to_thread 在线程池执行，/api/summary 与
+        # /api/system 可能并发调用，需用锁保护 _last_cpu_times 的读改写，避免
+        # 并发采样导致 delta≈0（CPU 显示 0%）或超界被 clamp 到 100%。
+        with self._cpu_lock:
+            if cpu_now and self._last_cpu_times:
+                total_delta = cpu_now[0] - self._last_cpu_times[0]
+                idle_delta = cpu_now[1] - self._last_cpu_times[1]
+                if total_delta > 0:
+                    cpu_percent = round(max(0.0, min(100.0, (1 - idle_delta / total_delta) * 100)), 2)
+            if cpu_now:
+                self._last_cpu_times = cpu_now
 
         mem = _read_proc_key_values(Path("/proc/meminfo"))
         total_mem = _kib_value(mem.get("MemTotal"))
@@ -1591,7 +1602,7 @@ class ObserverPanelPlugin(Star):
             "rss": _kib_value(status.get("VmRSS")),
             "vms": _kib_value(status.get("VmSize")),
             "threads": _as_int(status.get("Threads"), 0),
-            "max_rss": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024,
+            "max_rss": (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024) if resource else 0,
             "plugin_uptime_seconds": round(time.time() - self._started_at, 3),
         }
         if compact:
@@ -2009,8 +2020,9 @@ class ObserverPanelPlugin(Star):
         response.headers['X-Accel-Buffering'] = 'no'  # 禁用 nginx 缓冲
         await response.prepare(request)
 
+        gen = log_generator()
         try:
-            async for chunk in log_generator():
+            async for chunk in gen:
                 try:
                     await response.write(chunk.encode('utf-8'))
                     # 确保立即发送
@@ -2036,6 +2048,13 @@ class ObserverPanelPlugin(Star):
             if not any(keyword in error_msg for keyword in ['closing', 'closed', 'reset', 'broken']):
                 logger.error(f"[ObserverPanel] SSE 流错误: {e}")
         finally:
+            # 主动关闭 generator，确保其 finally（unsubscribe）立即执行，
+            # 而非依赖 GC 回收；否则断开的订阅者队列会持续被投递并触发
+            # QueueFull 警告刷屏（_process_log_stream 中 put_nowait）。
+            try:
+                await gen.aclose()
+            except Exception:
+                pass
             try:
                 await response.write_eof()
             except Exception:
@@ -2056,14 +2075,20 @@ class ObserverPanelPlugin(Star):
         # 获取缓存的日志（轮询模式不限制时间窗口，避免 since 过滤前被截断）
         logs = await self._get_stream_logs(500, time_window_minutes=0)
 
+        def _safe_log_time(log: dict[str, Any]) -> float:
+            try:
+                return float(log.get("time", 0) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
         # 过滤出 since 之后的日志
         if since_ts > 0:
-            logs = [log for log in logs if float(log.get("time", 0)) > since_ts]
+            logs = [log for log in logs if _safe_log_time(log) > since_ts]
 
         # 限制数量
         logs = logs[-limit:]
 
-        latest_ts = logs[-1].get("time", 0) if logs else since_ts
+        latest_ts = _safe_log_time(logs[-1]) if logs else since_ts
 
         return _json_response({
             "ok": True,

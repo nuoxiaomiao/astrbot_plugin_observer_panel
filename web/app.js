@@ -41,8 +41,8 @@ const state = {
     importantEventLimit: 80,
     rawClipLength: 5000,
   },
-  screenMode: initialQuery.get("screen") === "1",
   privacyMode: false,
+  editMode: false,
   timer: null,
   logFilterTimer: null,
   refreshMs: 5000,
@@ -176,8 +176,6 @@ const DEFAULT_RAW_CLIP_LENGTH = 5000;
 
 const qs = initialQuery;
 const token = qs.get("token") || "";
-
-document.body.classList.toggle("screen-mode", state.screenMode);
 
 function $(id) {
   return document.getElementById(id);
@@ -469,7 +467,6 @@ function applyPublicConfig(config) {
   state.logPageSize = Math.round(clampNumber(ui.log_page_size, DEFAULT_LOG_PAGE_SIZE, 20, 500));
   state.privacyMode = boolValue(ui.privacy_mode, false);
   state.refreshMs = Math.max(2000, Number(config?.refresh_interval_seconds || 5) * 1000);
-  document.body.classList.toggle("screen-mode", state.screenMode);
   document.body.classList.toggle("privacy-mode", state.privacyMode);
 }
 
@@ -664,7 +661,7 @@ function renderSummary() {
     : (readableLogs ? `${readableLogs} 个日志文件` : "无错误");
   setText("logsMeta", latestError);
 
-  if (state.activeTab !== "overview" && !state.screenMode) {
+  if (state.activeTab !== "overview") {
     return;
   }
 
@@ -3469,7 +3466,7 @@ function bind() {
   bindOverviewJump();
   bindCompactToggle();
   bindThemeToggle();
-  bindFullscreenToggle();
+  bindEditToggle();
   $("refreshBtn").addEventListener("click", () => refresh(true));
   $("autoRefresh").addEventListener("change", schedule);
   $("logFilter").addEventListener("input", queueLogFilterRender);
@@ -3580,8 +3577,7 @@ function handleKeyboardShortcuts(e) {
       break;
     }
     case "f":
-      e.preventDefault();
-      if (typeof toggleFullscreen === "function") toggleFullscreen();
+      // 全屏功能已移除
       break;
   }
 }
@@ -3778,10 +3774,19 @@ function enablePanelDragDrop(container, storageKey) {
   } catch (err) { /* ignore */ }
 
   const panels = [...container.querySelectorAll(":scope > .panel")];
-  panels.forEach((panel) => {
-    panel.draggable = true;
 
+  function syncDraggable() {
+    panels.forEach((panel) => {
+      panel.draggable = Boolean(state.editMode);
+    });
+  }
+
+  panels.forEach((panel) => {
     panel.addEventListener("dragstart", (e) => {
+      if (!state.editMode) {
+        e.preventDefault();
+        return;
+      }
       dragSrc = panel;
       panel.classList.add("dragging");
       e.dataTransfer.effectAllowed = "move";
@@ -3793,12 +3798,12 @@ function enablePanelDragDrop(container, storageKey) {
     panel.addEventListener("dragend", () => {
       panel.classList.remove("dragging");
       container.querySelectorAll(".panel").forEach((p) => p.classList.remove("drag-over", "drag-before", "drag-after"));
-      savePanelOrder(container, storeId);
+      if (state.editMode) savePanelOrder(container, storeId);
     });
 
     panel.addEventListener("dragover", (e) => {
       e.preventDefault();
-      if (!dragSrc || dragSrc === panel) return;
+      if (!state.editMode || !dragSrc || dragSrc === panel) return;
       e.dataTransfer.dropEffect = "move";
       const rect = panel.getBoundingClientRect();
       const after = (e.clientY - rect.top) > rect.height / 2;
@@ -3813,7 +3818,7 @@ function enablePanelDragDrop(container, storageKey) {
 
     panel.addEventListener("drop", (e) => {
       e.preventDefault();
-      if (!dragSrc || dragSrc === panel) return;
+      if (!state.editMode || !dragSrc || dragSrc === panel) return;
       const rect = panel.getBoundingClientRect();
       const after = (e.clientY - rect.top) > rect.height / 2;
       const reference = after ? panel.nextSibling : panel;
@@ -3821,6 +3826,9 @@ function enablePanelDragDrop(container, storageKey) {
       savePanelOrder(container, storeId);
     });
   });
+
+  syncDraggable();
+  return syncDraggable;
 }
 
 function savePanelOrder(container, storeId) {
@@ -3840,92 +3848,49 @@ function resetPanelLayout() {
   toast("已重置布局，刷新页面生效");
 }
 
+const panelDragSyncFns = new Set();
+
 function initPanelDragDrop() {
+  panelDragSyncFns.clear();
   // 总览两栏布局
-  document.querySelectorAll(".overview-live-layout").forEach((c, i) => enablePanelDragDrop(c, `overview_${i}`));
+  document.querySelectorAll(".overview-live-layout").forEach((c, i) => {
+    const sync = enablePanelDragDrop(c, `overview_${i}`);
+    if (sync) panelDragSyncFns.add(sync);
+  });
   // AstrBot 各 subview 的两栏布局
-  document.querySelectorAll(".runtime-stats-layout, .log-insight-layout").forEach((c, i) => enablePanelDragDrop(c, `astrbot_${i}`));
+  document.querySelectorAll(".runtime-stats-layout, .log-insight-layout").forEach((c, i) => {
+    const sync = enablePanelDragDrop(c, `astrbot_${i}`);
+    if (sync) panelDragSyncFns.add(sync);
+  });
   // 系统视图两栏布局
-  document.querySelectorAll(".system-sections, #system > .layout.two").forEach((c, i) => enablePanelDragDrop(c, `system_${i}`));
+  document.querySelectorAll(".system-sections, #system > .layout.two").forEach((c, i) => {
+    const sync = enablePanelDragDrop(c, `system_${i}`);
+    if (sync) panelDragSyncFns.add(sync);
+  });
   const resetBtn = $("resetLayout");
   if (resetBtn) resetBtn.addEventListener("click", resetPanelLayout);
 }
 
-// ============================================================================
-// 工具函数 - 全屏模式（3.3）
-// ============================================================================
-
-function isFullscreen() {
-  return Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+function syncAllPanelDraggable() {
+  panelDragSyncFns.forEach((fn) => fn());
+  document.body.classList.toggle("edit-mode", state.editMode);
 }
 
-function toggleFullscreen() {
-  if (isFullscreen()) {
-    if (document.exitFullscreen) document.exitFullscreen();
-    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-    exitScreenMode();
-  } else {
-    const root = document.documentElement;
-    const req = root.requestFullscreen || root.webkitRequestFullscreen;
-    if (req) {
-      const result = req.call(root);
-      if (result && typeof result.catch === "function") result.catch(() => { /* 用户拒绝或不可用 */ });
-    }
-  }
-}
-
-function enterScreenMode() {
-  state.screenMode = true;
-  document.body.classList.add("screen-mode");
-}
-
-function exitScreenMode() {
-  state.screenMode = false;
-  document.body.classList.remove("screen-mode");
-}
-
-function syncFullscreenButton() {
-  const btn = $("fullscreenToggle");
+function toggleEditMode() {
+  state.editMode = !state.editMode;
+  syncAllPanelDraggable();
+  const btn = $("editToggle");
   if (btn) {
-    const active = isFullscreen() || state.screenMode;
-    btn.classList.toggle("active", active);
-    btn.setAttribute("aria-pressed", active ? "true" : "false");
-    btn.textContent = active ? "退出全屏" : "全屏";
+    btn.classList.toggle("active", state.editMode);
+    btn.setAttribute("aria-pressed", state.editMode ? "true" : "false");
+    btn.textContent = state.editMode ? "完成" : "编辑";
   }
+  toast(state.editMode ? "已进入编辑模式，可拖拽面板" : "已退出编辑模式");
 }
 
-function bindFullscreenToggle() {
-  const btn = $("fullscreenToggle");
-  if (btn) {
-    btn.addEventListener("click", () => {
-      if (isFullscreen()) {
-        toggleFullscreen();
-      } else {
-        // 非 Fullscreen API 全屏时，进入 screen-mode（CSS 隐藏侧栏等）
-        if (!state.screenMode) {
-          enterScreenMode();
-          syncFullscreenButton();
-        } else {
-          exitScreenMode();
-          syncFullscreenButton();
-        }
-      }
-    });
-  }
-  // 监听系统全屏状态变化（Esc 退出等）
-  document.addEventListener("fullscreenchange", () => {
-    if (!isFullscreen() && state.screenMode) {
-      exitScreenMode();
-    }
-    syncFullscreenButton();
-  });
-  if (document.webkitFullscreenElement !== undefined) {
-    document.addEventListener("webkitfullscreenchange", () => {
-      if (!isFullscreen() && state.screenMode) exitScreenMode();
-      syncFullscreenButton();
-    });
-  }
-  syncFullscreenButton();
+function bindEditToggle() {
+  const btn = $("editToggle");
+  if (btn) btn.addEventListener("click", toggleEditMode);
 }
 
 // ============================================================================
@@ -4286,31 +4251,13 @@ async function progressiveLogInit() {
       }
     }
 
-    // 提取所有历史日志行作为 SSE 条目的基础，并尽量从行内解析真实时间戳
-    const historicalEntries = [];
-    (state.logs?.astrbot || []).forEach((file) => {
-      if (!file.lines || !Array.isArray(file.lines)) return;
-      file.lines.forEach((line, idx) => {
-        if (!line) return;
-        const tsMs = parseLogTimestampMs(line);
-        const tsSec = tsMs ? tsMs / 1000 : (file.mtime || Date.now() / 1000);
-        const levelMatch = String(line).match(/\b(DEBUG|INFO|WARNING|WARN|ERROR|TRACE)\b/i);
-        historicalEntries.push({
-          message: line,
-          time: tsSec,
-          level: (levelMatch?.[1] || "INFO").toUpperCase(),
-          path: file.path,
-          lineNumber: (file.base_line || 0) + idx + 1,
-        });
-      });
-    });
-
-    // 按时间升序排列并限制数量，保留最近的 300 条
-    historicalEntries.sort((a, b) => a.time - b.time);
-    state.logCache.sseEntries = historicalEntries.slice(-300);
+    // sseEntries 只承载真正的实时 SSE 消息（handleSSELogEntry 追加）。
+    // 历史上下文由文件条目本身（state.logs.astrbot）提供，这里不再把文件行
+    // 二次拷贝进 sseEntries，否则 buildLogEntries 会同时拼接两者导致每行显示两遍。
+    state.logCache.sseEntries = [];
 
     if (statusText) {
-      statusText.textContent = `已加载 ${state.logCache.sseEntries.length} 条历史日志`;
+      statusText.textContent = "历史日志已就绪";
     }
   } catch (err) {
     console.warn("[ObserverPanel] 加载历史日志失败:", err);
@@ -4425,16 +4372,6 @@ const keyboardShortcuts = {
       if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
         e.preventDefault();
         selectTab("system");
-      }
-    },
-  },
-  fullscreen: {
-    key: "f",
-    description: "切换全屏模式",
-    handler: (e) => {
-      if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
-        e.preventDefault();
-        if (typeof toggleFullscreen === "function") toggleFullscreen();
       }
     },
   },
