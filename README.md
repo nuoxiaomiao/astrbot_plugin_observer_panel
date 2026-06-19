@@ -4,38 +4,12 @@
 
 ## 安装
 
-在 AstrBot 插件市场中搜索 `astrbot_plugin_observer_panel`，或手动克隆到 `data/plugins/astrbot_plugin_observer_panel` 目录后重启 AstrBot。
+通过 GitHub 链接安装。在 AstrBot 插件目录下克隆本仓库后重启 AstrBot：
 
 ```bash
 cd data/plugins
-git clone https://github.com/your-username/astrbot_plugin_observer_panel.git
+git clone https://github.com/nuoxiaomiao/astrbot_plugin_observer_panel.git
 ```
-
-## ✨ 新特性（v0.3.0+）
-
-### 🚀 LogBroker 日志流集成（可选，默认关闭）
-
-插件支持直接从 AstrBot 的日志流（LogBroker）获取日志，实现**零延迟的实时日志监控**。默认关闭，只通过定时轮询读取日志文件；在配置中开启 `enable_log_stream` 后才会建立 SSE 连接。
-
-**主要优势：**
-- ⚡ **零延迟**：直接从内存获取日志，延迟 <10ms（文件模式 100-500ms）
-- 📡 **实时推送**：通过 SSE (Server-Sent Events) 实时推送日志到前端
-- 💪 **高效能**：避免重复文件 I/O，CPU 和磁盘开销降低 95%+
-- 🔄 **自动 Fallback**：LogBroker 不可用时自动切换到文件读取模式
-- 🎯 **完全兼容**：无需修改配置，现有功能全部保留
-
-**新增 API 端点：**
-- `GET /api/logs/stream` - SSE 实时日志流（推荐）
-- `GET /api/logs/live` - 轮询式实时日志获取
-
-**检查状态：**
-```bash
-curl "http://127.0.0.1:6199/api/health?token=your_token" | jq
-```
-
-查看 `log_mode` 字段：
-- `"logbroker"` - 已启用日志流（推荐）
-- `"file"` - 文件读取模式
 
 ## 功能
 
