@@ -1,0 +1,169 @@
+{
+  "enabled": {
+    "description": "启用观察面板",
+    "type": "bool",
+    "default": true
+  },
+  "host": {
+    "description": "WebUI 监听地址",
+    "hint": "默认 127.0.0.1 仅本机可访问；需要局域网访问再改为 0.0.0.0。",
+    "type": "string",
+    "default": "127.0.0.1"
+  },
+  "port": {
+    "description": "WebUI 监听端口",
+    "type": "int",
+    "default": 6199
+  },
+  "access_token": {
+    "description": "访问令牌",
+    "hint": "留空则本机 API 不鉴权；监听 0.0.0.0 时远程 API 会要求配置令牌。设置后可手动打开 http://host:port/?token=你的令牌。",
+    "type": "string",
+    "default": ""
+  },
+  "refresh_interval_seconds": {
+    "description": "前端自动刷新间隔（秒）",
+    "type": "int",
+    "default": 5
+  },
+  "enable_log_stream": {
+    "description": "启用 LogBroker 实时日志流（SSE）",
+    "hint": "默认关闭，只通过定时轮询读取日志文件；开启后会建立 SSE 连接获取实时日志。",
+    "type": "bool",
+    "default": false
+  },
+  "astrbot": {
+    "description": "AstrBot 数据源配置",
+    "type": "object",
+    "items": {
+      "logs_dir": {
+        "description": "AstrBot 日志目录",
+        "type": "string",
+        "default": "data/logs"
+      },
+      "log_files": {
+        "description": "AstrBot 日志文件名或绝对路径列表",
+        "type": "list",
+        "default": ["astrbot.log", "astrbot.trace.log"]
+      },
+      "tail_lines": {
+        "description": "每个 AstrBot 日志文件读取的最大行数",
+        "type": "int",
+        "default": 300
+      },
+      "tail_bytes": {
+        "description": "每个 AstrBot 日志文件读取的最大字节数",
+        "type": "int",
+        "default": 262144
+      }
+    }
+  },
+  "security": {
+    "description": "安全显示配置",
+    "type": "object",
+    "items": {
+      "redact_secrets": {
+        "description": "对配置和日志中的常见密钥进行脱敏",
+        "type": "bool",
+        "default": true
+      }
+    }
+  },
+  "ui": {
+    "description": "观察面板显示与日志洞察配置",
+    "type": "object",
+    "items": {
+      "slow_session_seconds": {
+        "description": "会话生成超过多少秒记为慢请求",
+        "type": "int",
+        "default": 30
+      },
+      "slow_tool_seconds": {
+        "description": "工具调用超过多少秒记为慢工具",
+        "type": "int",
+        "default": 15
+      },
+      "running_timeout_minutes": {
+        "description": "多久内未完成的会话或工具仍视为运行中",
+        "type": "int",
+        "default": 10
+      },
+      "important_event_limit": {
+        "description": "重要信息列表最多显示的事件数",
+        "type": "int",
+        "default": 80
+      },
+      "log_page_size": {
+        "description": "原始日志每页显示行数",
+        "type": "int",
+        "default": 80
+      },
+      "privacy_mode": {
+        "description": "隐藏消息内容、工具参数、工具结果和原始日志正文",
+        "type": "bool",
+        "default": false
+      }
+    }
+  },
+  "thresholds": {
+    "description": "健康诊断阈值",
+    "type": "object",
+    "items": {
+      "cpu_warn_percent": {
+        "description": "CPU 警告阈值百分比",
+        "type": "int",
+        "default": 75
+      },
+      "cpu_bad_percent": {
+        "description": "CPU 异常阈值百分比",
+        "type": "int",
+        "default": 90
+      },
+      "memory_warn_percent": {
+        "description": "内存警告阈值百分比",
+        "type": "int",
+        "default": 75
+      },
+      "memory_bad_percent": {
+        "description": "内存异常阈值百分比",
+        "type": "int",
+        "default": 90
+      },
+      "disk_warn_percent": {
+        "description": "磁盘警告阈值百分比",
+        "type": "int",
+        "default": 80
+      },
+      "disk_bad_percent": {
+        "description": "磁盘异常阈值百分比",
+        "type": "int",
+        "default": 92
+      },
+      "error_warn_count": {
+        "description": "摘要窗口内错误日志警告阈值",
+        "type": "int",
+        "default": 1
+      },
+      "error_bad_count": {
+        "description": "摘要窗口内错误日志异常阈值",
+        "type": "int",
+        "default": 5
+      },
+      "stale_log_minutes": {
+        "description": "日志多久未更新后提示（分钟）",
+        "type": "int",
+        "default": 10
+      },
+      "summary_log_lines": {
+        "description": "总览诊断最多分析的日志行数",
+        "type": "int",
+        "default": 180
+      },
+      "summary_log_bytes": {
+        "description": "总览诊断最多读取的日志字节数",
+        "type": "int",
+        "default": 131072
+      }
+    }
+  }
+}
