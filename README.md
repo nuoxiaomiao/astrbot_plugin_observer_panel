@@ -13,7 +13,7 @@ git clone https://github.com/nuoxiaomiao/astrbot_plugin_observer_panel.git
 
 ## 功能
 
-- 独立 `aiohttp` Web 服务，默认监听 `127.0.0.1:6199`
+- 独立 `aiohttp` Web 服务，默认监听 `127.0.0.1:7199`
 - 主机系统信息：CPU、内存、磁盘、网络接口、AstrBot 进程与 Python 运行时
 - 三栏工作台布局：左侧导航与状态，中间主工作区，右侧事件证据详情
 - 默认极简总览：系统健康、关键运行态、重要事件和实时工具
@@ -36,25 +36,19 @@ git clone https://github.com/nuoxiaomiao/astrbot_plugin_observer_panel.git
 启用插件后访问：
 
 ```text
-http://127.0.0.1:6199/
+http://127.0.0.1:7199/
 ```
 
 如果设置了 `access_token`，可以手动在浏览器地址里附加令牌：
 
 ```text
-http://127.0.0.1:6199/?token=你的令牌
+http://127.0.0.1:7199/?token=你的令牌
 ```
 
 大屏模式：
 
 ```text
-http://127.0.0.1:6199/?screen=1
-```
-
-也可以由管理员在聊天里发送：
-
-```text
-观察面板
+http://127.0.0.1:7199/?screen=1
 ```
 
 ### 实时日志流使用示例
@@ -64,7 +58,7 @@ http://127.0.0.1:6199/?screen=1
 ```javascript
 const token = 'your_token';
 const eventSource = new EventSource(
-  `http://127.0.0.1:6199/api/logs/stream?history=50&token=${token}`
+  `http://127.0.0.1:7199/api/logs/stream?history=50&token=${token}`
 );
 
 eventSource.onmessage = (event) => {
@@ -81,16 +75,16 @@ eventSource.onerror = () => {
 
 ```bash
 # 获取最新日志
-curl "http://127.0.0.1:6199/api/logs/live?limit=100&token=your_token"
+curl "http://127.0.0.1:7199/api/logs/live?limit=100&token=your_token"
 
 # 获取指定时间戳之后的日志
-curl "http://127.0.0.1:6199/api/logs/live?since=1701234567.89&token=your_token"
+curl "http://127.0.0.1:7199/api/logs/live?since=1701234567.89&token=your_token"
 ```
 
 ## 配置重点
 
 - `host`: 默认 `127.0.0.1`，只允许本机访问。需要局域网访问时改成 `0.0.0.0`。
-- `port`: WebUI 端口，默认 `6199`。
+- `port`: WebUI 端口，默认 `7199`。
 - `access_token`: 面板 API 访问令牌。监听 `0.0.0.0` 且未设置令牌时，远程 API 请求会被拒绝，本机请求仍可访问。
 - `enable_log_stream`: 是否启用 LogBroker 实时日志流（SSE），默认 `false`。关闭时只通过定时轮询读取日志文件，不再建立 SSE 连接。
 - `astrbot.logs_dir`: AstrBot 日志目录，默认 `data/logs`（仅文件模式使用）。
@@ -176,7 +170,7 @@ GET /api/logs/live?limit=100&since=1701234567.89&token=xxx
 
 **检查方式**：
 ```bash
-curl "http://127.0.0.1:6199/api/health?token=xxx" | jq '.log_mode'
+curl "http://127.0.0.1:7199/api/health?token=xxx" | jq '.log_mode'
 # 输出: "logbroker"
 ```
 
@@ -199,7 +193,7 @@ curl "http://127.0.0.1:6199/api/health?token=xxx" | jq '.log_mode'
 
 1. 检查健康状态：
 ```bash
-curl "http://127.0.0.1:6199/api/health?token=xxx" | jq
+curl "http://127.0.0.1:7199/api/health?token=xxx" | jq
 ```
 
 2. 查看插件日志：

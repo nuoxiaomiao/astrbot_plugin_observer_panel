@@ -13,7 +13,7 @@
   "port": {
     "description": "WebUI 监听端口",
     "type": "int",
-    "default": 6199
+    "default": 7199
   },
   "access_token": {
     "description": "访问令牌",

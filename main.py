@@ -816,20 +816,11 @@ class ObserverPanelPlugin(Star):
         await self._cleanup_log_broker()
         await self._stop_server()
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("观察面板", alias={"observer", "监控面板", "日志面板"})
-    async def observer_panel(self, event: AstrMessageEvent):
-        """查看 AstrBot 观察面板地址。"""
-        if self._site is None:
-            yield event.plain_result("观察面板未启动，请检查插件配置或 AstrBot 日志。")
-            return
-        yield event.plain_result(f"观察面板：{self.public_url}")
-
     @property
     def base_url(self) -> str:
         host = self._cfg_str("host", "127.0.0.1")
         visible_host = "127.0.0.1" if host == "0.0.0.0" else host
-        port = self._cfg_int("port", 6199, 1, 65535)
+        port = self._cfg_int("port", 7199, 1, 65535)
         return f"http://{visible_host}:{port}/"
 
     @property
@@ -841,7 +832,7 @@ class ObserverPanelPlugin(Star):
             return
 
         host = self._cfg_str("host", "127.0.0.1")
-        port = self._cfg_int("port", 6199, 1, 65535)
+        port = self._cfg_int("port", 7199, 1, 65535)
 
         try:
             # 创建 aiohttp 应用并启用内置压缩
@@ -1688,7 +1679,7 @@ class ObserverPanelPlugin(Star):
             {
                 "enabled": self._cfg_bool("enabled", True),
                 "host": self._cfg_str("host", "127.0.0.1"),
-                "port": self._cfg_int("port", 6199, 1, 65535),
+                "port": self._cfg_int("port", 7199, 1, 65535),
                 "has_access_token": bool(self._cfg_str("access_token", "")),
                 "refresh_interval_seconds": self._cfg_int("refresh_interval_seconds", 5, 2, 120),
                 "log_stream_enabled": self._use_log_stream,
