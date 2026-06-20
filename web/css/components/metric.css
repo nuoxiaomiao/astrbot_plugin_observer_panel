@@ -1,0 +1,119 @@
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin: 0;
+  align-content: start;
+}
+.metric,
+.mini-metric {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+  transition: var(--transition), transform 0.2s ease;
+  box-shadow: var(--shadow-sm);
+  position: relative;  /* 为 ::before 伪元素定位 */
+}
+
+.metric:hover,
+.mini-metric:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-md);
+}
+
+/* Smooth transitions for all interactive elements */
+.metric,
+.mini-metric,
+.panel,
+.tab,
+.subtab,
+.event-item,
+.resource-card,
+.stack-item,
+.function-card,
+.config-tile,
+.badge,
+.mini-badge {
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.metric {
+  padding: 12px;
+  min-height: 72px;
+  contain: layout paint;
+}
+
+/* 指标卡片点击跳转（2.2） */
+.metric[data-jump] {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.metric[data-jump]:hover {
+  border-color: var(--info);
+  box-shadow: var(--shadow-md), 0 0 0 2px rgba(76, 154, 255, 0.2);
+}
+
+.metric[data-jump]:active {
+  transform: scale(0.98);
+}
+
+.metric span,
+.mini-metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.metric span {
+  text-transform: uppercase;
+}
+
+.metric strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 20px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+  color: var(--text-bright);
+}
+
+.metric small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted-dark);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+/* Grafana 风格增强：指标卡片顶部渐变指示器 */
+.metric::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-dim) 0%, var(--accent-bright) 100%);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s var(--ease-out);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.metric:hover::before {
+  transform: scaleX(1);
+}
+
+/* ==================== 交互增强 ==================== */
+
+/* 状态卡片悬停放大与渐变背景 */
+.metric:hover {
+  background: var(--gradient-subtle);
+  transform: scale(1.02);
+}

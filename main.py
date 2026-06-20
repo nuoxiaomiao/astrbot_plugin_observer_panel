@@ -802,7 +802,6 @@ class ObserverPanelPlugin(Star):
         self._log_stats_cache: dict[str, Any] = {}
         self._started_at = time.time()
         self._system_cache: dict[str, Any] = {}
-        self._static_cache: dict[str, tuple[str, float, str]] = {}
 
         # LogBroker 日志流集成
         self._log_broker: Any | None = None
@@ -849,8 +848,6 @@ class ObserverPanelPlugin(Star):
             )
 
             app.router.add_get("/", self._handle_index)
-            app.router.add_get("/app.js", self._handle_static)
-            app.router.add_get("/styles.css", self._handle_static)
             app.router.add_get("/api/health", self._handle_health)
             app.router.add_get("/api/summary", self._handle_summary)
             app.router.add_get("/api/system", self._handle_system)
@@ -860,6 +857,8 @@ class ObserverPanelPlugin(Star):
             # LogBroker 日志流 API
             app.router.add_get("/api/logs/stream", self._handle_logs_stream)
             app.router.add_get("/api/logs/live", self._handle_logs_live)
+            # 通用静态资源服务（支持模块化后的 CSS/JS 多文件）
+            app.router.add_static("/", self.web_dir, name="static", show_index=False)
 
             runner = web.AppRunner(app, access_log=None)
             await runner.setup()
@@ -916,9 +915,8 @@ class ObserverPanelPlugin(Star):
                 return _json_response({"ok": False, "error": "远程访问需要配置访问令牌"}, status=401)
             return await handler(request)
 
-        # 静态资源（JS/CSS）不需要认证，因为它们会被 CSP 限制
-        # 只有通过认证的 index.html 才能加载这些资源
-        if request.path in ["/app.js", "/styles.css"]:
+        # 静态资源不需要认证（它们受 CSP 限制，且只有通过认证的 index.html 才能正确加载）
+        if request.path != "/" and not request.path.startswith("/api/"):
             return await handler(request)
 
         # 有 token 配置时，从请求中获取
@@ -941,61 +939,15 @@ class ObserverPanelPlugin(Star):
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         return response
 
-    async def _handle_static(self, request: web.Request) -> web.Response:
-        name = request.path.strip("/")
-        if name == "app.js":
-            content_type = "application/javascript"
-        elif name == "styles.css":
-            content_type = "text/css"
-        else:
-            return web.Response(status=404, text="Not found")
-        path = self.web_dir / name
-        cache_key = str(path)
-        now = time.time()
-
-        try:
-            stat = path.stat()
-        except OSError:
-            return web.Response(status=404, text="Not found")
-
-        mtime = stat.st_mtime
-        mtime_str = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(mtime))
-        etag = f'W/"{stat.st_size}-{int(mtime)}"'
-
-        # 如果内存缓存的 mtime 与磁盘一致，直接返回缓存；否则重新读取。
-        cached = self._static_cache.get(cache_key)
-        if cached:
-            data, cached_mtime, cached_etag = cached
-            if cached_mtime == mtime and cached_etag == etag:
-                if_none_match = request.headers.get("If-None-Match", "")
-                if etag and if_none_match == etag:
-                    return web.Response(status=304)
-                response = web.Response(text=data, content_type=content_type)
-                response.headers["Cache-Control"] = "public, max-age=0, must-revalidate"
-                response.headers["ETag"] = etag
-                response.headers["Last-Modified"] = mtime_str
-                response.enable_compression()
-                return response
-
-        try:
-            data = await asyncio.to_thread(path.read_text, encoding="utf-8")
-        except OSError:
-            return web.Response(status=404, text="Not found")
-
-        self._static_cache[cache_key] = (data, mtime, etag)
-        response = web.Response(text=data, content_type=content_type)
-        response.headers["Cache-Control"] = "public, max-age=0, must-revalidate"
-        response.headers["ETag"] = etag
-        response.headers["Last-Modified"] = mtime_str
-        response.enable_compression()
-        return response
-
     async def _send_file(self, path: Path, *, content_type: str) -> web.Response:
         try:
             text = await asyncio.to_thread(path.read_text, encoding="utf-8")
         except OSError:
             return web.Response(status=404, text="Not found")
         response = web.Response(text=text, content_type=content_type)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
         response.enable_compression()
         return response
 

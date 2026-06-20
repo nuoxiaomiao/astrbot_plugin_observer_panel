@@ -1,0 +1,17 @@
+#logs.view.active {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-content: start;
+}
+#logs .important-panel,
+#logs .log-stream-panel {
+  margin-bottom: 0;
+}
+
+#logs .important-panel .event-list {
+  max-height: min(640px, calc(100vh - 260px));
+}
+.log-stream-panel {
+  margin-bottom: 0;
+}

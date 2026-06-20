@@ -210,6 +210,15 @@ WebUI 只展示本机系统信息、AstrBot 运行信息和日志，不提供发
 
 ## 技术架构
 
+### 前端架构
+
+WebUI 为纯原生实现，无构建工具、无外部框架依赖：
+
+- `web/index.html`：入口页面。
+- `web/css/`：模块化样式表，按 `tokens`、`base`、`layout`、`components`、`views` 组织。
+- `web/js/`：原生 ES Modules，按 `state`、`api`、`utils`、`log`、`components`、`views`、`sse`、`ui`、`main` 组织。
+- 后端通过 `aiohttp.web.add_static("/", web_dir)` 统一服务静态资源。
+
 ### LogBroker 模式架构
 
 ```

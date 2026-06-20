@@ -1,0 +1,69 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b0d10;
+  --surface: #14171b;
+  --surface-2: #1c2026;
+  --surface-3: #252a31;
+  --surface-hover: #20252c;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --text: #e8ecef;
+  --text-bright: #f4f7f9;
+  --muted: #9aa3ad;
+  --muted-dark: #727c87;
+  --accent: #30a46c;
+  --accent-bright: #4cc38a;
+  --accent-dim: #238553;
+  --info: #4c9aff;
+  --info-bright: #71b7ff;
+  --warn: #d29922;
+  --warn-bright: #e3b341;
+  --danger: #f85149;
+  --danger-bright: #ff7b72;
+  --debug: #9e77ed;
+  --debug-bright: #c19cff;
+  --memory: #a371f7;
+  --memory-bright: #bc8cff;
+  --waking: #79c0ff;
+  --waking-bright: #a0d2ff;
+  --provider: #79d9a8;
+  --provider-bright: #a5e9c5;
+  --cleanup: #f0883e;
+  --cleanup-bright: #ffb366;
+  --success: #30a46c;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.42);
+  --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.18), 0 1px 2px rgba(0, 0, 0, 0.22);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.22), 0 4px 16px rgba(0, 0, 0, 0.16);
+  --shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.28), 0 10px 30px rgba(0, 0, 0, 0.22);
+  --shadow-active: 0 1px 4px rgba(0, 0, 0, 0.24);
+  --gradient-subtle: linear-gradient(135deg, rgba(48, 164, 108, 0.06) 0%, rgba(76, 154, 255, 0.06) 100%);
+  --gradient-accent: linear-gradient(135deg, var(--accent-dim) 0%, var(--accent-bright) 100%);
+  --gradient-info: linear-gradient(135deg, var(--info) 0%, var(--info-bright) 100%);
+
+  /* Transition timing variables for consistent animations */
+  --duration-fast: 0.15s;
+  --duration-normal: 0.25s;
+  --duration-slow: 0.35s;
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.0, 0, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+}
