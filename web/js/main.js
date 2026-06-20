@@ -2,19 +2,18 @@
 // 入口文件
 // ============================================================================
 
-console.log("[ObserverPanel] main.js loaded, build 20260620-renderfix1");
+console.log("[ObserverPanel] main.js loaded, build 20260620-sessionlive1");
 
-import { state } from "./state.js?v=20260620-renderfix1";
-import { fetchJson, logsApiPath } from "./api.js?v=20260620-renderfix1";
-import { applyPublicConfig, renderWorkspaceChrome, toast } from "./utils/dom.js?v=20260620-renderfix1";
-import { renderSummary } from "./views/overview.js?v=20260620-renderfix1";
-import { renderSystem } from "./views/system.js?v=20260620-renderfix1";
-import { renderAstrBot } from "./views/astrbot.js?v=20260620-renderfix1";
-import { renderLogs } from "./views/logs.js?v=20260620-renderfix1";
-import { bindUI, promptNotificationPermission, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode } from "./ui.js?v=20260620-renderfix1";
-import { connectSSE, resetSSEBackoff, updateSSEStatus } from "./sse.js?v=20260620-renderfix1";
-import { initEventListActions } from "./components/event-list.js?v=20260620-renderfix1";
-import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260620-renderfix1";
+import { state } from "./state.js?v=20260620-sessionlive1";
+import { fetchJson, logsApiPath } from "./api.js?v=20260620-sessionlive1";
+import { applyPublicConfig, renderWorkspaceChrome, toast } from "./utils/dom.js?v=20260620-sessionlive1";
+import { renderSummary } from "./views/overview.js?v=20260620-sessionlive1";
+import { renderSystem } from "./views/system.js?v=20260620-sessionlive1";
+import { renderAstrBot } from "./views/astrbot.js?v=20260620-sessionlive1";
+import { renderLogs } from "./views/logs.js?v=20260620-sessionlive1";
+import { bindUI, promptNotificationPermission, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode } from "./ui.js?v=20260620-sessionlive1";
+import { initEventListActions } from "./components/event-list.js?v=20260620-sessionlive1";
+import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260620-sessionlive1";
 
 function logTailLimit() {
   return Math.max(20, Number(state.config?.astrbot?.tail_lines || 300));
@@ -50,7 +49,6 @@ function mergeLogFile(existing, incoming) {
 function mergeLogData(incoming) {
   const current = state.logs || {};
   const incomingAstrbot = incoming?.astrbot;
-  // 安全兜底：如果后端未返回 astrbot 文件数组，不要清空已有日志（SSE 模式可能只返回 live）
   if (!Array.isArray(incomingAstrbot)) {
     state.logs = { ...current, ...incoming };
     return;
@@ -193,57 +191,23 @@ function schedule() {
 }
 
 async function progressiveLogInit() {
-  // 第一步：快速加载配置和基础信息（包含一次文件日志刷新）
   await refresh(false);
 
-  // 第二步：确保 state.logs.astrbot 有文件日志数据。
-  // 当 SSE 启用时，refresh(false) 返回的是 data.live，没有 astrbot 文件数组；
-  // 此时需要额外请求 force_file=1 的文件日志，并通过 mergeLogData 合并，避免覆盖已有内容。
-  try {
-    updateSSEStatus?.(state.config?.log_stream_enabled ? "connecting" : "unavailable");
-    const statusText = document.getElementById("sidebarStatusText");
-    if (statusText) {
-      statusText.textContent = "正在加载历史日志...";
-    }
-
-    const hasFileLogs = (state.logs?.astrbot || []).some((file) => Array.isArray(file.lines) && file.lines.length);
-    if (!hasFileLogs) {
-      const logsResponse = await fetchJson(logsApiPath(true));
-      if (logsResponse.ok && logsResponse.data) {
-        mergeLogData(logsResponse.data);
-      }
-    }
-
-    // sseEntries 只承载真正的实时 SSE 消息（handleSSELogEntry 追加）。
-    // 历史上下文由文件条目本身（state.logs.astrbot）提供，这里不再把文件行
-    // 二次拷贝进 sseEntries，否则 buildLogEntries 会同时拼接两者导致每行显示两遍。
-    state.logCache.sseEntries = [];
-
-    if (statusText) {
-      statusText.textContent = "历史日志已就绪";
-    }
-  } catch (err) {
-    console.warn("[ObserverPanel] 加载历史日志失败:", err);
+  const statusText = document.getElementById("sidebarStatusText");
+  if (statusText) {
+    statusText.textContent = "文件轮询模式";
   }
 
-  // 立即渲染历史日志（如果当前在日志/总览页）
   if (state.activeTab === "logs" || state.activeTab === "overview") {
     state.logCache.signature = "";
     renderLogs();
   }
 
-  // 第三步：如果启用了日志流，连接 SSE 实时流
-  if (state.config?.log_stream_enabled) {
-    await new Promise((resolve) => window.setTimeout(resolve, 300));
-    connectSSE();
-
-    // 第四步：再次刷新以获取最新的日志分析数据
-    window.setTimeout(() => {
-      refresh(false);
-    }, 1000);
+  if (window.location.search.includes("token=")) {
+    const cleanUrl = `${window.location.pathname}${window.location.hash}`;
+    window.history.replaceState({}, document.title, cleanUrl);
   }
 
-  // 启动定时刷新
   schedule();
 }
 
@@ -268,8 +232,6 @@ bindUI({
   renderLogs,
   closeDetailPanel,
   toggleEditMode,
-  resetSSEBackoff,
-  connectSSE,
 });
 
 syncDetailVisibility();
@@ -277,12 +239,3 @@ selectAstrBotTab(state.astrbotSubTab);
 
 progressiveLogInit();
 promptNotificationPermission();
-
-// 切回可见时：如果 SSE 应该启用但实际未连接，则尝试重连。
-// 切到后台时不再主动断开连接，避免「一切换标签就断流」的体验问题。
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && state.config?.log_stream_enabled && !state.sseEventSource) {
-    resetSSEBackoff();
-    connectSSE();
-  }
-});

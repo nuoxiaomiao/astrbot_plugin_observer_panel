@@ -2,7 +2,7 @@
 // 日志分析与 trace 洞察
 // ============================================================================
 
-import { state } from "../state.js?v=20260620-renderfix1";
+import { state } from "../state.js?v=20260620-sessionlive1";
 import {
   DEFAULT_SLOW_SESSION_MS,
   DEFAULT_SLOW_TOOL_MS,
@@ -12,17 +12,17 @@ import {
   PLUG_MODULE_LABELS,
   TRACE_ACTION_LABELS,
   EVENT_TYPES,
-} from "../config.js?v=20260620-renderfix1";
-import { average } from "../utils/format.js?v=20260620-renderfix1";
+} from "../config.js?v=20260620-sessionlive1";
+import { average } from "../utils/format.js?v=20260620-sessionlive1";
 import {
   compactText,
   compactJson,
   safeObject,
   bracketParts,
-} from "../utils/log-text.js?v=20260620-renderfix1";
-import { getLogSearchText, detailKey, stableKeyText } from "../utils/dom.js?v=20260620-renderfix1";
-import { buildLogEntries } from "./parser.js?v=20260620-renderfix1";
-import { logFilesSignature, recentAnalysisEntries } from "./cache.js?v=20260620-renderfix1";
+} from "../utils/log-text.js?v=20260620-sessionlive1";
+import { getLogSearchText, detailKey, stableKeyText } from "../utils/dom.js?v=20260620-sessionlive1";
+import { buildLogEntries } from "./parser.js?v=20260620-sessionlive1";
+import { logFilesSignature, recentAnalysisEntries } from "./cache.js?v=20260620-sessionlive1";
 
 export function getLogAnalysis(files) {
   const signature = logFilesSignature(files);
@@ -395,6 +395,120 @@ export function sessionSourceLabel(session) {
   if (/GroupMessage/i.test(umo)) return "群聊";
   if (/PrivateMessage|FriendMessage|DirectMessage/i.test(umo)) return "私聊";
   return "其他";
+}
+
+const IMAGE_REPLY_TOOLS = new Set([
+  "aiimg_generate",
+  "aiimg_batch_generate",
+  "gitee_draw_image",
+  "gitee_edit_image",
+]);
+
+const ACTION_REPLY_TOOLS = new Set([
+  "delete_msg",
+  "send_like",
+  "set_group_ban",
+  "set_group_card",
+]);
+
+const IMAGE_REPLY_PATTERNS = [
+  /already been generated and sent to the user/i,
+  /do not send another confirmation message/i,
+  /已经生成并发送给用户/i,
+  /图片.*已发送/i,
+];
+
+const EMOJI_ONLY_RESPONSE_PATTERN = /^&&([a-zA-Z]+)&&$/;
+const POKE_MESSAGE_PATTERN = /\[ComponentType\.Poke\]/i;
+
+function sessionResponseTextValue(session) {
+  return String(session?.response || "").trim();
+}
+
+function sessionToolNames(session) {
+  return (session?.tools || [])
+    .map((tool) => String(tool?.name || "").trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function sessionToolResults(session) {
+  return (session?.tools || [])
+    .map((tool) => String(tool?.result || ""))
+    .filter(Boolean);
+}
+
+function sessionHasTool(session, toolSet) {
+  return sessionToolNames(session).some((name) => toolSet.has(name));
+}
+
+function sessionHasToolResult(session, patterns) {
+  return sessionToolResults(session).some((result) => patterns.some((pattern) => pattern.test(result)));
+}
+
+function sessionOutputTokenCount(session) {
+  return tokenValue(session?.tokenUsage, ["output", "output_text", "completion_tokens"]);
+}
+
+function sessionHasLoggedTextResponse(session) {
+  const response = sessionResponseTextValue(session);
+  return Boolean(response) && !EMOJI_ONLY_RESPONSE_PATTERN.test(response);
+}
+
+function sessionLooksLikeImageReply(session) {
+  return sessionHasTool(session, IMAGE_REPLY_TOOLS) || sessionHasToolResult(session, IMAGE_REPLY_PATTERNS);
+}
+
+function sessionLooksLikeActionReply(session) {
+  return sessionHasTool(session, ACTION_REPLY_TOOLS);
+}
+
+function sessionLooksLikeEmojiReply(session) {
+  const response = sessionResponseTextValue(session);
+  if (EMOJI_ONLY_RESPONSE_PATTERN.test(response)) return true;
+  if (!response && POKE_MESSAGE_PATTERN.test(String(session?.messageOutline || ""))) return true;
+  if (sessionLooksLikeImageReply(session) || sessionLooksLikeActionReply(session)) return false;
+  return session.status === "complete"
+    && !response
+    && sessionOutputTokenCount(session) > 0
+    && sessionOutputTokenCount(session) <= 8;
+}
+
+export function sessionReplyKind(session) {
+  if (!session) return "pending";
+  if (session.status === "error") return "error";
+  if (sessionLooksLikeEmojiReply(session)) return "emoji";
+  if (sessionHasLoggedTextResponse(session)) return "text";
+  if (sessionLooksLikeImageReply(session)) return "image";
+  if (sessionLooksLikeActionReply(session)) return "action";
+  if (session.status === "complete") return "unknown";
+  return "pending";
+}
+
+export function sessionReplyHint(session) {
+  const kind = session?.replyKind || sessionReplyKind(session);
+  if (kind === "image") {
+    return "该会话已完成，图片已由绘图工具直接发送，日志里没有保留完整的文本正文。";
+  }
+  if (kind === "action") {
+    return "该会话已完成，主要结果是执行动作类工具，例如撤回、点赞或群管理，日志里没有保留文本正文。";
+  }
+  if (kind === "emoji") {
+    return "该会话已完成，可能通过表情包、戳一戳或其他轻互动方式完成了回复。";
+  }
+  if (kind === "unknown") {
+    return "该会话已完成，但日志中没有记录最终文本正文，可能是非文本回复，也可能是正文未被 trace 保留下来。";
+  }
+  return "";
+}
+
+export function sessionDisplayStatus(session) {
+  if (!session) return "pending";
+  if (session.status === "complete" && !sessionHasLoggedTextResponse(session)) return "empty";
+  if (session.status === "complete") return "complete";
+  if (session.status === "error") return "error";
+  if (session.status === "generating") return "generating";
+  if (session.status === "running") return "running";
+  return "pending";
 }
 
 export function tokenTotal(tokenUsage) {
@@ -870,6 +984,12 @@ export function buildTraceInsights(entries) {
     return normalized;
   }
 
+  function pushSessionEvent(session, event) {
+    const normalized = pushEvent(event);
+    if (session) session.events.push(normalized.id);
+    return normalized;
+  }
+
   function ensureSession(entry) {
     const trace = entry.trace || {};
     const spanId = trace.spanId || entry.id;
@@ -890,11 +1010,12 @@ export function buildTraceInsights(entries) {
         tokenUsage: {},
         providerId: "",
         model: "",
+        enteredAgentFlow: false,
         tools: [],
         events: [],
       };
       sessions.set(spanId, session);
-      const messageIn = pushEvent({
+      pushSessionEvent(session, {
         id: eventKey(spanId, "message_in", entry),
         timestamp: entry.timestamp || trace.time || 0,
         spanId,
@@ -908,7 +1029,6 @@ export function buildTraceInsights(entries) {
         messageKey: messageDedupeKey(trace.senderName, trace.messageOutline),
         evidence: evidenceFromEntry(entry, `trace:${trace.action || "message_in"}`, "trace", "high"),
       });
-      session.events.push(messageIn.id);
     }
     session.lastTs = Math.max(session.lastTs || 0, entry.timestamp || trace.time || 0);
     if (trace.senderName) session.senderName = trace.senderName;
@@ -926,7 +1046,7 @@ export function buildTraceInsights(entries) {
 
     if (action === "sel_persona") {
       session.personaId = trace.personaId || "";
-      pushEvent({
+      pushSessionEvent(session, {
         id: eventKey(spanId, "persona", entry),
         timestamp: ts,
         spanId,
@@ -942,9 +1062,10 @@ export function buildTraceInsights(entries) {
 
     if (action === "astr_agent_prepare") {
       session.status = "generating";
+      session.enteredAgentFlow = true;
       session.providerId = trace.providerId || session.providerId;
       session.model = trace.model || session.model;
-      pushEvent({
+      pushSessionEvent(session, {
         id: eventKey(spanId, "model_start", entry),
         timestamp: ts,
         spanId,
@@ -960,6 +1081,7 @@ export function buildTraceInsights(entries) {
     }
 
     if (action === "agent_tool_call") {
+      session.enteredAgentFlow = true;
       const call = {
         id: trace.toolCallId || eventKey(spanId, "tool_call", entry),
         spanId,
@@ -975,7 +1097,7 @@ export function buildTraceInsights(entries) {
       };
       toolCalls.push(call);
       session.tools.push(call);
-      pushEvent({
+      pushSessionEvent(session, {
         id: eventKey(spanId, "tool_call", entry, call.id),
         timestamp: ts,
         spanId,
@@ -992,6 +1114,7 @@ export function buildTraceInsights(entries) {
     }
 
     if (action === "agent_tool_result") {
+      session.enteredAgentFlow = true;
       const callId = trace.toolCallId || "";
       const call = [...toolCalls].reverse().find((item) => item.id === callId && item.status === "running")
         || [...toolCalls].reverse().find((item) => item.spanId === spanId && item.status === "running");
@@ -1006,7 +1129,7 @@ export function buildTraceInsights(entries) {
         name = call.name;
         durationMs = call.durationMs;
       }
-      pushEvent({
+      pushSessionEvent(session, {
         id: eventKey(spanId, "tool_result", entry, callId),
         timestamp: ts,
         spanId,
@@ -1024,13 +1147,15 @@ export function buildTraceInsights(entries) {
 
     if (action === "astr_agent_complete") {
       session.status = "complete";
+      session.enteredAgentFlow = true;
+      session.completed = true;
       session.response = trace.response || "";
       session.durationMs = trace.durationMs;
       session.timeToFirstTokenMs = trace.timeToFirstTokenMs;
       session.tokenUsage = trace.tokenUsage || {};
       session.providerId = trace.providerId || session.providerId;
       session.model = trace.model || session.model;
-      pushEvent({
+      pushSessionEvent(session, {
         id: eventKey(spanId, "message_out", entry),
         timestamp: ts,
         spanId,
@@ -1044,7 +1169,7 @@ export function buildTraceInsights(entries) {
         evidence: evidenceFromEntry(entry, "trace:astr_agent_complete", "trace", "high"),
       });
       if (trace.durationMs != null && trace.durationMs >= slowSessionMs) {
-        pushEvent({
+        pushSessionEvent(session, {
           id: eventKey(spanId, "slow", entry),
           timestamp: ts,
           spanId,
@@ -1063,7 +1188,8 @@ export function buildTraceInsights(entries) {
 
     if (action === "astr_agent_error" || entry.level === "error") {
       session.status = "error";
-      pushEvent({
+      session.enteredAgentFlow = true;
+      pushSessionEvent(session, {
         id: eventKey(spanId, "error", entry),
         timestamp: ts,
         spanId,
@@ -1093,8 +1219,19 @@ export function buildTraceInsights(entries) {
       if (event) pushEvent(event);
     });
 
-  const sessionsList = [...sessions.values()].sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
-  const runningSessions = sessionsList.filter((session) => {
+  const allTraceSessions = [...sessions.values()].sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
+  const visibleSessions = allTraceSessions
+    .filter((session) => session.enteredAgentFlow || session.completed)
+    .map((session) => {
+      const replyKind = sessionReplyKind(session);
+      const enriched = { ...session, replyKind };
+      return {
+        ...enriched,
+        replyHint: sessionReplyHint(enriched),
+        displayStatus: sessionDisplayStatus(enriched),
+      };
+    });
+  const runningSessions = allTraceSessions.filter((session) => {
     if (session.status === "complete" || session.status === "error") return false;
     return now - (session.lastTs || 0) <= runningTimeoutMs;
   });
@@ -1127,13 +1264,13 @@ export function buildTraceInsights(entries) {
   const sourceMap = new Map();
   const senderMap = new Map();
   const personaMap = new Map();
-  sessionsList.forEach((session) => {
+  visibleSessions.forEach((session) => {
     addStat(sourceMap, sessionSourceLabel(session));
     addStat(senderMap, session.senderName || "未记录发送者");
     addStat(personaMap, session.personaId || "未记录规则");
   });
 
-  const completedSessions = sessionsList.filter((session) => session.status === "complete");
+  const completedSessions = visibleSessions.filter((session) => session.status === "complete");
   const durationSessions = completedSessions.filter((session) => Number.isFinite(Number(session.durationMs)));
   const durations = durationSessions.map((session) => Number(session.durationMs));
   const tokenTotals = completedSessions.map((session) => tokenTotal(session.tokenUsage));
@@ -1196,7 +1333,8 @@ export function buildTraceInsights(entries) {
     .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, "zh-CN"));
 
   return {
-    sessions: sessionsList,
+    allTraceSessions,
+    sessions: visibleSessions,
     runningSessions,
     toolCalls,
     runningTools,

@@ -2,9 +2,9 @@
 // 组件 - 日志流
 // ============================================================================
 
-import { state } from "../state.js?v=20260620-renderfix1";
-import { LEVELS } from "../config.js?v=20260620-renderfix1";
-import { formatCompactLogTime } from "../utils/format.js?v=20260620-renderfix1";
+import { state } from "../state.js?v=20260620-sessionlive1";
+import { LEVELS } from "../config.js?v=20260620-sessionlive1";
+import { formatCompactLogTime } from "../utils/format.js?v=20260620-sessionlive1";
 import {
   $,
   setText,
@@ -19,9 +19,9 @@ import {
   getLogSearchText,
   stableKeyText,
   renderSignature,
-} from "../utils/dom.js?v=20260620-renderfix1";
-import { compactText } from "../utils/log-text.js?v=20260620-renderfix1";
-import { buildLogTextMatcher, cachedNormalizeModuleGroup } from "../log/analytics.js?v=20260620-renderfix1";
+} from "../utils/dom.js?v=20260620-sessionlive1";
+import { compactText } from "../utils/log-text.js?v=20260620-sessionlive1";
+import { buildLogTextMatcher, cachedNormalizeModuleGroup } from "../log/analytics.js?v=20260620-sessionlive1";
 
 let selectTabRef = () => {};
 let syncDetailVisibilityRef = () => {};

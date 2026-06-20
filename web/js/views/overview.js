@@ -2,19 +2,19 @@
 // 视图 - 总览
 // ============================================================================
 
-import { state } from "../state.js?v=20260620-renderfix1";
-import { DIAGNOSTIC_LEVELS, IMPORTANT_EVENT_TYPES } from "../config.js?v=20260620-renderfix1";
-import { formatPercent, formatCompactLogTime, formatTime, shortUptime, usageKind } from "../utils/format.js?v=20260620-renderfix1";
+import { state } from "../state.js?v=20260620-sessionlive1";
+import { DIAGNOSTIC_LEVELS, IMPORTANT_EVENT_TYPES } from "../config.js?v=20260620-sessionlive1";
+import { formatPercent, formatCompactLogTime, formatTime, shortUptime, usageKind } from "../utils/format.js?v=20260620-sessionlive1";
 import {
   $,
   setText,
   renderSignature,
   renderKv,
-} from "../utils/dom.js?v=20260620-renderfix1";
-import { compactText, compactJson } from "../utils/log-text.js?v=20260620-renderfix1";
-import { renderBarChart } from "../components/chart.js?v=20260620-renderfix1";
-import { renderEventList } from "../components/event-list.js?v=20260620-renderfix1";
-import { checkDiagnosticNotifications } from "../ui.js?v=20260620-renderfix1";
+} from "../utils/dom.js?v=20260620-sessionlive1";
+import { compactText, compactJson } from "../utils/log-text.js?v=20260620-sessionlive1";
+import { renderBarChart } from "../components/chart.js?v=20260620-sessionlive1";
+import { renderEventList } from "../components/event-list.js?v=20260620-sessionlive1";
+import { checkDiagnosticNotifications } from "../ui.js?v=20260620-sessionlive1";
 
 function diagnosticLabel(status) {
   return DIAGNOSTIC_LEVELS[status]?.label || "未知";
@@ -138,7 +138,7 @@ export function renderOverviewTrace(insights) {
   setText("bigScreenStamp", formatTime(Date.now()));
   const latestOut = insights.events.find((event) => event.type === "message_out");
   const cardItems = [
-    ["活动会话", insights.runningSessions.length, `近 ${insights.sessions.length} 条会话`, insights.runningSessions.length ? "warn" : "ok"],
+    ["活动会话", insights.runningSessions.length, `有效会话 ${insights.sessions.length} 条`, insights.runningSessions.length ? "warn" : "ok"],
     ["运行工具", insights.runningTools.length, `总调用 ${insights.toolCalls.length} 次`, insights.runningTools.length ? "warn" : "ok"],
     ["慢请求", insights.slowCount, `${state.ui.slowSessionMs / 1000} 秒会话阈值`, insights.slowCount ? "warn" : "ok"],
     ["错误事件", insights.errorCount, "trace 窗口内", insights.errorCount ? "bad" : "ok"],

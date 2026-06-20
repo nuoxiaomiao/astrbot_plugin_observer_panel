@@ -4,6 +4,26 @@
   gap: 12px;
   align-content: start;
 }
+
+.log-mode-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.log-mode-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--muted);
+}
+
 #logs .important-panel,
 #logs .log-stream-panel {
   margin-bottom: 0;

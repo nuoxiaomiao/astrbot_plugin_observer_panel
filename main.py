@@ -15,33 +15,25 @@ import sys
 import threading
 import time
 from datetime import datetime
-from collections import deque
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, parse_qs
+
+from aiohttp import web
+from aiohttp.web_response import Response
+
+from astrbot.api import AstrBotConfig, logger
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.star import Context, Star, StarTools, register
 
 try:
     import resource
 except ImportError:
     resource = None
 
-from aiohttp import web
-
-from astrbot.api import AstrBotConfig, logger
-from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.star import Context, Star, StarTools, register
-
-# 尝试导入 LogBroker 用于日志流功能
-try:
-    from astrbot.core import LogBroker
-    LOGBROKER_AVAILABLE = True
-except ImportError:
-    LOGBROKER_AVAILABLE = False
-    LogBroker = None
-
 
 PLUGIN_NAME = "astrbot_plugin_observer_panel"
-PLUGIN_VERSION = "0.3.0"
+PLUGIN_VERSION = "0.3.2"
 
 DEFAULT_ASTRBOT_LOG_FILES = ["astrbot.log", "astrbot.trace.log"]
 DEFAULT_THRESHOLDS = {
@@ -64,7 +56,8 @@ DEFAULT_UI = {
     "privacy_mode": False,
 }
 
-ALLOWED_LOG_SOURCES = {"all", "astrbot", "live", "stream"}
+ALLOWED_LOG_SOURCES = {"all", "astrbot"}
+AUTH_COOKIE_NAME = "observer_panel_token"
 
 SECRET_KEY_RE = re.compile(
     r"(?i)(?<![\w])(api[_-]?key|access[_-]?token|authorization|bearer|secret|password|passwd|token|key)(?![\w])"
@@ -803,23 +796,13 @@ class ObserverPanelPlugin(Star):
         self._started_at = time.time()
         self._system_cache: dict[str, Any] = {}
 
-        # LogBroker 日志流集成
-        self._log_broker: Any | None = None
-        self._log_queue: Any | None = None
-        self._log_stream_cache: deque = deque(maxlen=500)
-        self._log_subscribers: list[asyncio.Queue] = []
-        self._log_stream_task: asyncio.Task | None = None
-        self._use_log_stream = False
-
     async def initialize(self) -> None:
         if not self._cfg_bool("enabled", True):
             logger.info("[ObserverPanel] 已禁用，未启动 WebUI")
             return
-        await self._try_init_log_broker()
         await self._start_server()
 
     async def terminate(self) -> None:
-        await self._cleanup_log_broker()
         await self._stop_server()
 
     @property
@@ -854,9 +837,6 @@ class ObserverPanelPlugin(Star):
             app.router.add_get("/api/astrbot", self._handle_astrbot)
             app.router.add_get("/api/logs", self._handle_logs)
             app.router.add_get("/api/config", self._handle_config)
-            # LogBroker 日志流 API
-            app.router.add_get("/api/logs/stream", self._handle_logs_stream)
-            app.router.add_get("/api/logs/live", self._handle_logs_live)
             # 通用静态资源服务（支持模块化后的 CSS/JS 多文件）
             app.router.add_static("/", self.web_dir, name="static", show_index=False)
 
@@ -911,17 +891,18 @@ class ObserverPanelPlugin(Star):
 
         # 无 token 配置时，仅对远程非 API 请求拒绝
         if not token:
-            if self._host_all_interfaces() and not self._is_loopback_request(request) and request.path.startswith("/api/"):
-                return _json_response({"ok": False, "error": "远程访问需要配置访问令牌"}, status=401)
-            return await handler(request)
-
-        # 静态资源不需要认证（它们受 CSP 限制，且只有通过认证的 index.html 才能正确加载）
-        if request.path != "/" and not request.path.startswith("/api/"):
+            if self._host_all_interfaces() and not self._is_loopback_request(request):
+                if request.path.startswith("/api/"):
+                    return _json_response({"ok": False, "error": "远程访问需要配置访问令牌"}, status=401)
+                return web.Response(status=401, text="远程访问需要配置访问令牌")
             return await handler(request)
 
         # 有 token 配置时，从请求中获取
-        # 安全性：只接受来自查询参数或 Authorization 头的 token
-        supplied = request.query.get("token", "")
+        # 优先读取 cookie，使首次使用 ?token= 访问后后续静态资源也能正常加载
+        supplied = request.cookies.get(AUTH_COOKIE_NAME, "")
+        query_token = request.query.get("token", "")
+        if query_token:
+            supplied = query_token
         if not supplied:
             header = request.headers.get("Authorization", "")
             if header.lower().startswith("bearer "):
@@ -931,7 +912,10 @@ class ObserverPanelPlugin(Star):
             if request.path.startswith("/api/"):
                 return _json_response({"ok": False, "error": "未授权访问"}, status=401)
             return web.Response(status=401, text="未授权访问")
-        return await handler(request)
+        response = await handler(request)
+        if query_token and hmac.compare_digest(query_token, token):
+            self._set_auth_cookie(response, query_token, request)
+        return response
 
     async def _handle_index(self, request: web.Request) -> web.Response:
         response = await self._send_file(self.web_dir / "index.html", content_type="text/html")
@@ -951,6 +935,17 @@ class ObserverPanelPlugin(Star):
         response.enable_compression()
         return response
 
+    def _set_auth_cookie(self, response: Response, token: str, request: web.Request) -> None:
+        secure = request.secure or request.headers.get("X-Forwarded-Proto", "").lower() == "https"
+        response.set_cookie(
+            AUTH_COOKIE_NAME,
+            token,
+            httponly=True,
+            samesite="Lax",
+            secure=secure,
+            path="/",
+        )
+
     async def _handle_health(self, request: web.Request) -> web.Response:
         return _json_response(
             {
@@ -958,10 +953,10 @@ class ObserverPanelPlugin(Star):
                 "plugin": PLUGIN_NAME,
                 "version": PLUGIN_VERSION,
                 "uptime_seconds": round(time.time() - self._started_at, 3),
-                "log_mode": "logbroker" if self._use_log_stream else "file",
-                "log_stream_available": LOGBROKER_AVAILABLE,
-                "log_stream_enabled": self._use_log_stream,
-                "cached_logs": len(self._log_stream_cache) if self._use_log_stream else 0,
+                "log_mode": "file",
+                "log_stream_available": False,
+                "log_stream_enabled": False,
+                "cached_logs": 0,
                 "now": _now_ms(),
             }
         )
@@ -1016,25 +1011,6 @@ class ObserverPanelPlugin(Star):
         if source not in ALLOWED_LOG_SOURCES:
             return _json_response({"ok": False, "error": "无效的日志来源"}, status=400)
 
-        # 前端初始化时需要先拿到文件日志作为历史上下文；force_file=1 强制走文件模式。
-        force_file = _as_bool(request.query.get("force_file"), False)
-
-        # 如果启用了 LogBroker ，优先使用日志流（前端默认 source=astrbot 也应走流式）
-        if not force_file and self._use_log_stream and source in {"all", "astrbot", "live", "stream"}:
-            limit = _as_int(request.query.get("limit"), 300, 1, 1000)
-            logs = await self._get_stream_logs(limit)
-
-            return _json_response({
-                "ok": True,
-                "data": {
-                    "live": logs,
-                    "use_log_stream": True,
-                    "source": "logbroker"
-                },
-                "now": _now_ms()
-            })
-
-        # Fallback 到原有的文件读取逻辑
         cursor_str = request.query.get("cursor", "")
         if len(cursor_str) > 50000:
             return _json_response({"ok": False, "error": "游标参数过大"}, status=400)
@@ -1042,7 +1018,6 @@ class ObserverPanelPlugin(Star):
         data: dict[str, Any] = {}
         if source in {"all", "astrbot"}:
             data["astrbot"] = await self._collect_astrbot_logs(cursor=cursor)
-            data["use_log_stream"] = False
             data["source"] = "file"
         return _json_response({"ok": True, "data": data, "now": _now_ms()})
 
@@ -1645,8 +1620,8 @@ class ObserverPanelPlugin(Star):
                 "port": self._cfg_int("port", 7199, 1, 65535),
                 "has_access_token": bool(self._cfg_str("access_token", "")),
                 "refresh_interval_seconds": self._cfg_int("refresh_interval_seconds", 5, 2, 120),
-                "log_stream_enabled": self._use_log_stream,
-                "log_stream_available": LOGBROKER_AVAILABLE,
+                "log_stream_enabled": False,
+                "log_stream_available": False,
                 "astrbot": {
                     "logs_dir": self._astrbot_cfg_str("logs_dir", "data/logs"),
                     "log_files": _as_list(self._astrbot_cfg("log_files", DEFAULT_ASTRBOT_LOG_FILES), DEFAULT_ASTRBOT_LOG_FILES),
@@ -1729,326 +1704,3 @@ class ObserverPanelPlugin(Star):
 
     def _threshold_float(self, key: str, default: float, min_value: float | None = None, max_value: float | None = None) -> float:
         return _as_float(self._section_cfg("thresholds", key, default), default, min_value, max_value)
-
-    # ==================== LogBroker 日志流集成方法 ====================
-
-    async def _try_init_log_broker(self) -> None:
-        """尝试从 AstrBot 核心获取 LogBroker 实例（使用策略模式）"""
-        if not self._cfg_bool("enable_log_stream", False):
-            logger.info("[ObserverPanel] 配置已关闭实时日志流（enable_log_stream=false），使用文件轮询模式")
-            self._use_log_stream = False
-            return
-
-        if not LOGBROKER_AVAILABLE:
-            logger.info("[ObserverPanel] LogBroker 不可用，将使用文件读取模式")
-            self._use_log_stream = False
-            return
-
-        strategies = [
-            self._try_log_broker_from_context,
-            self._try_log_broker_from_managers,
-            self._try_log_broker_from_logger,
-            self._try_log_broker_from_modules,
-        ]
-
-        for strategy in strategies:
-            try:
-                log_broker = strategy()
-                if log_broker is not None:
-                    await self._activate_log_broker(log_broker)
-                    return
-            except Exception as e:
-                logger.debug(f"[ObserverPanel] 策略 {strategy.__name__} 失败: {e}")
-
-        logger.info("[ObserverPanel] 未能获取 LogBroker 实例，将使用文件读取模式")
-        logger.debug("[ObserverPanel] 提示：如果需要日志流功能，请确保 AstrBot 核心正确初始化了 LogBroker")
-        self._use_log_stream = False
-
-    def _try_log_broker_from_context(self):
-        """策略1: 通过 context 内部属性获取 LogBroker"""
-        logger.debug("[ObserverPanel] 尝试策略1: 通过 context 内部属性")
-        for attr_name in ['_core_lifecycle', 'core_lifecycle', '_core', 'core', '_internal']:
-            if hasattr(self.context, attr_name):
-                core = getattr(self.context, attr_name, None)
-                if core and hasattr(core, 'log_broker'):
-                    logger.info(f"[ObserverPanel] 通过 context.{attr_name}.log_broker 获取到 LogBroker")
-                    return core.log_broker
-        return None
-
-    def _try_log_broker_from_managers(self):
-        """策略2: 通过 context 的管理器获取 LogBroker"""
-        logger.debug("[ObserverPanel] 尝试策略2: 通过管理器")
-        manager_attrs = [
-            'provider_manager', 'platform_manager', 'conversation_manager',
-            'astrbot_config_mgr', 'kb_manager', 'cron_manager', 'subagent_orchestrator'
-        ]
-        for manager_attr in manager_attrs:
-            if hasattr(self.context, manager_attr):
-                manager = getattr(self.context, manager_attr)
-                if manager is None:
-                    continue
-                for core_attr in ['_core_lifecycle', 'core_lifecycle', '_core', 'core']:
-                    if hasattr(manager, core_attr):
-                        core = getattr(manager, core_attr, None)
-                        if core and hasattr(core, 'log_broker'):
-                            logger.info(f"[ObserverPanel] 通过 context.{manager_attr}.{core_attr}.log_broker 获取到 LogBroker")
-                            return core.log_broker
-        return None
-
-    def _try_log_broker_from_logger(self):
-        """策略3: 通过全局 logger 对象获取 LogBroker"""
-        logger.debug("[ObserverPanel] 尝试策略3: 检查 logger handlers")
-        from astrbot.api import logger as astrbot_logger
-        if hasattr(astrbot_logger, 'handlers'):
-            for handler in astrbot_logger.handlers:
-                if hasattr(handler, 'log_broker'):
-                    logger.info("[ObserverPanel] 通过 logger.handlers 获取到 LogBroker")
-                    return handler.log_broker
-        return None
-
-    def _try_log_broker_from_modules(self):
-        """策略4: 从核心模块扫描获取 LogBroker"""
-        logger.debug("[ObserverPanel] 尝试策略4: 核心模块扫描")
-        for module_name in ['astrbot.core', 'astrbot.core.log', 'astrbot.core.lifecycle']:
-            module = sys.modules.get(module_name)
-            if module is None:
-                continue
-            for attr_name in ['log_broker', 'LogBroker', '_log_broker']:
-                obj = getattr(module, attr_name, None)
-                if obj is not None and hasattr(obj, 'register'):
-                    logger.info(f"[ObserverPanel] 通过 {module_name}.{attr_name} 获取到 LogBroker")
-                    return obj
-        return None
-
-    async def _activate_log_broker(self, log_broker) -> None:
-        """激活 LogBroker 并启动日志流处理"""
-        self._log_broker = log_broker
-        self._log_queue = log_broker.register()
-        self._use_log_stream = True
-
-        # 复制已缓存的历史日志
-        if hasattr(log_broker, 'log_cache'):
-            cached_logs = list(log_broker.log_cache)
-            self._log_stream_cache.extend(cached_logs)
-            logger.info(f"[ObserverPanel] 已加载 {len(cached_logs)} 条历史日志")
-
-        # 启动后台任务处理日志流
-        self._log_stream_task = asyncio.create_task(self._process_log_stream())
-
-        logger.info("[ObserverPanel] ✓ LogBroker 日志流已启用，实时日志功能已激活")
-
-    async def _process_log_stream(self) -> None:
-        """后台任务：持续处理 LogBroker 的日志流"""
-        if self._log_queue is None:
-            return
-
-        try:
-            logger.debug("[ObserverPanel] 日志流处理任务已启动")
-            while True:
-                # 从队列获取日志条目
-                log_entry = await self._log_queue.get()
-
-                # 添加到本地缓存
-                self._log_stream_cache.append(log_entry)
-
-                # 分发给所有 SSE 订阅者
-                dead_subscribers = []
-                for subscriber in self._log_subscribers:
-                    try:
-                        subscriber.put_nowait(log_entry)
-                    except asyncio.QueueFull:
-                        # 队列满了，跳过这条日志（避免阻塞）
-                        # 记录警告，让用户知道日志可能不完整
-                        logger.warning("[ObserverPanel] SSE 订阅者队列已满，丢弃日志条目")
-                    except Exception as e:
-                        # 订阅者已失效
-                        logger.debug(f"[ObserverPanel] 检测到失效的订阅者: {e}")
-                        dead_subscribers.append(subscriber)
-
-                # 清理失效的订阅者
-                for sub in dead_subscribers:
-                    if sub in self._log_subscribers:
-                        self._log_subscribers.remove(sub)
-
-        except asyncio.CancelledError:
-            logger.debug("[ObserverPanel] 日志流处理任务已取消")
-        except Exception as e:
-            logger.error(f"[ObserverPanel] 日志流处理错误: {e}", exc_info=True)
-
-    async def _cleanup_log_broker(self) -> None:
-        """清理 LogBroker 相关资源"""
-        # 取消后台任务
-        if self._log_stream_task is not None:
-            self._log_stream_task.cancel()
-            try:
-                await self._log_stream_task
-            except asyncio.CancelledError:
-                pass
-            self._log_stream_task = None
-
-        # 注销日志队列
-        if self._log_broker is not None and self._log_queue is not None:
-            try:
-                self._log_broker.unregister(self._log_queue)
-                logger.debug("[ObserverPanel] 已注销 LogBroker 订阅")
-            except Exception as e:
-                logger.warning(f"[ObserverPanel] 注销 LogBroker 时出错: {e}")
-            self._log_queue = None
-            self._log_broker = None
-
-        # 清理缓存和订阅者
-        self._log_stream_cache.clear()
-        self._log_subscribers.clear()
-
-    def _subscribe_log_stream(self) -> asyncio.Queue:
-        """创建一个新的日志流订阅（用于 SSE）"""
-        queue = asyncio.Queue(maxsize=600)
-        self._log_subscribers.append(queue)
-        return queue
-
-    def _unsubscribe_log_stream(self, queue: asyncio.Queue) -> None:
-        """取消日志流订阅"""
-        if queue in self._log_subscribers:
-            self._log_subscribers.remove(queue)
-
-    async def _get_stream_logs(self, limit: int = 300, time_window_minutes: int = 0) -> list[dict[str, Any]]:
-        """从日志流缓存获取最近的日志
-
-        Args:
-            limit: 最多返回的日志条数
-            time_window_minutes: 时间窗口（分钟），0 表示不限制
-
-        Returns:
-            日志列表
-        """
-        logs = list(self._log_stream_cache)
-
-        # 如果指定了时间窗口，过滤日志
-        if time_window_minutes > 0:
-            cutoff_time = time.time() - (time_window_minutes * 60)
-            logs = [log for log in logs if log.get("time", 0) >= cutoff_time]
-
-        return logs[-limit:] if len(logs) > limit else logs
-
-    # ==================== 新增 API 处理器 ====================
-
-    async def _handle_logs_stream(self, request: web.Request) -> web.StreamResponse:
-        """SSE 实时日志流接口"""
-        if not self._use_log_stream:
-            return _json_response({"ok": False, "error": "日志流不可用，已切换文件模式"}, status=503)
-
-        async def log_generator():
-            """生成器：持续推送日志"""
-            # 1. 首先发送历史日志
-            history_limit = _as_int(request.query.get("history"), 50, 0, 200)
-            if history_limit > 0:
-                history = await self._get_stream_logs(history_limit)
-                for log_entry in history:
-                    data = json.dumps(log_entry, ensure_ascii=False)
-                    yield f"data: {data}\n\n"
-
-            # 2. 订阅实时日志流
-            queue = self._subscribe_log_stream()
-            try:
-                while True:
-                    try:
-                        # 20秒超时，用于发送心跳（兼容更严格的代理/负载均衡空闲超时）
-                        log_entry = await asyncio.wait_for(queue.get(), timeout=20.0)
-                        data = json.dumps(log_entry, ensure_ascii=False)
-                        yield f"data: {data}\n\n"
-                    except asyncio.TimeoutError:
-                        # 发送心跳保持连接
-                        yield ": heartbeat\n\n"
-            except asyncio.CancelledError:
-                pass
-            finally:
-                self._unsubscribe_log_stream(queue)
-
-        # 创建 SSE 响应
-        response = web.StreamResponse()
-        response.headers['Content-Type'] = 'text/event-stream'
-        response.headers['Cache-Control'] = 'no-cache'
-        response.headers['Connection'] = 'keep-alive'
-        response.headers['X-Accel-Buffering'] = 'no'  # 禁用 nginx 缓冲
-        await response.prepare(request)
-
-        gen = log_generator()
-        try:
-            async for chunk in gen:
-                try:
-                    await response.write(chunk.encode('utf-8'))
-                    # 确保立即发送
-                    await response.drain()
-                except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
-                    # 客户端断开连接，这是正常的
-                    break
-                except Exception as e:
-                    # 检查是否是连接关闭相关的错误
-                    error_msg = str(e).lower()
-                    if any(keyword in error_msg for keyword in ['closing', 'closed', 'reset', 'broken']):
-                        # 这些都是客户端断开的正常情况，不记录错误
-                        break
-                    else:
-                        # 其他错误才记录
-                        logger.error(f"[ObserverPanel] SSE 写入错误: {e}")
-                        break
-        except asyncio.CancelledError:
-            # 请求被取消，正常情况
-            pass
-        except Exception as e:
-            error_msg = str(e).lower()
-            if not any(keyword in error_msg for keyword in ['closing', 'closed', 'reset', 'broken']):
-                logger.error(f"[ObserverPanel] SSE 流错误: {e}")
-        finally:
-            # 主动关闭 generator，确保其 finally（unsubscribe）立即执行，
-            # 而非依赖 GC 回收；否则断开的订阅者队列会持续被投递并触发
-            # QueueFull 警告刷屏（_process_log_stream 中 put_nowait）。
-            try:
-                await gen.aclose()
-            except Exception:
-                pass
-            try:
-                await response.write_eof()
-            except Exception:
-                # 连接已关闭，忽略
-                pass
-
-        return response
-
-    async def _handle_logs_live(self, request: web.Request) -> web.Response:
-        """获取实时日志（轮询方式）"""
-        if not self._use_log_stream:
-            # Fallback 到文件读取模式
-            return await self._handle_logs(request)
-
-        limit = _as_int(request.query.get("limit"), 100, 1, 500)
-        since_ts = _as_float(request.query.get("since"), 0.0, 0.0)
-
-        # 获取缓存的日志（轮询模式不限制时间窗口，避免 since 过滤前被截断）
-        logs = await self._get_stream_logs(500, time_window_minutes=0)
-
-        def _safe_log_time(log: dict[str, Any]) -> float:
-            try:
-                return float(log.get("time", 0) or 0)
-            except (TypeError, ValueError):
-                return 0.0
-
-        # 过滤出 since 之后的日志
-        if since_ts > 0:
-            logs = [log for log in logs if _safe_log_time(log) > since_ts]
-
-        # 限制数量
-        logs = logs[-limit:]
-
-        latest_ts = _safe_log_time(logs[-1]) if logs else since_ts
-
-        return _json_response({
-            "ok": True,
-            "data": {
-                "logs": logs,
-                "use_log_stream": True,
-                "count": len(logs),
-                "latest_ts": latest_ts
-            },
-            "now": _now_ms()
-        })

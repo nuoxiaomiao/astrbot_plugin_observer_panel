@@ -2,9 +2,9 @@
 // 组件 - 事件列表
 // ============================================================================
 
-import { state } from "../state.js?v=20260620-renderfix1";
-import { IMPORTANT_EVENT_TYPES } from "../config.js?v=20260620-renderfix1";
-import { formatTime, formatCompactLogTime } from "../utils/format.js?v=20260620-renderfix1";
+import { state } from "../state.js?v=20260620-sessionlive1";
+import { IMPORTANT_EVENT_TYPES } from "../config.js?v=20260620-sessionlive1";
+import { formatTime, formatCompactLogTime } from "../utils/format.js?v=20260620-sessionlive1";
 import {
   $,
   setText,
@@ -17,7 +17,7 @@ import {
   pruneOpenDetails,
   eventChainDetailKey,
   clippedText,
-} from "../utils/dom.js?v=20260620-renderfix1";
+} from "../utils/dom.js?v=20260620-sessionlive1";
 import {
   eventTypeLabel,
   eventTypeBadge,
@@ -25,8 +25,8 @@ import {
   confidenceLabel,
   eventDurationLabel,
   evidenceDetailKey,
-} from "../log/analytics.js?v=20260620-renderfix1";
-import { focusLogEntry } from "./log-list.js?v=20260620-renderfix1";
+} from "../log/analytics.js?v=20260620-sessionlive1";
+import { focusLogEntry } from "./log-list.js?v=20260620-sessionlive1";
 
 let renderLogsRef = () => {};
 

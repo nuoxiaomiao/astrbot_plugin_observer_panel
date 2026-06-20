@@ -2,8 +2,8 @@
 // 日志解析
 // ============================================================================
 
-import { state } from "../state.js?v=20260620-renderfix1";
-import { LOG_TIMESTAMP_RE } from "../config.js?v=20260620-renderfix1";
+import { state } from "../state.js?v=20260620-sessionlive1";
+import { LOG_TIMESTAMP_RE } from "../config.js?v=20260620-sessionlive1";
 import {
   compactText,
   safeObject,
@@ -12,7 +12,7 @@ import {
   summarizeJsonLog,
   summarizePlainLog,
   bracketParts,
-} from "../utils/log-text.js?v=20260620-renderfix1";
+} from "../utils/log-text.js?v=20260620-sessionlive1";
 
 /**
  * 从日志行文本解析毫秒级时间戳；解析失败时返回 null。
@@ -239,42 +239,12 @@ export function pruneFileEntryCache(files) {
   });
 }
 
-export function parseSSELogEntry(raw, index) {
-  const message = String(raw.message || raw.msg || "");
-  const time = raw.time ? Number(raw.time) * 1000 : Date.now();
-  const level = normalizeLevel(raw.level || "") || "other";
-  const moduleName = raw.name || raw.module || raw.logger || "";
-  return {
-    id: `sse:${index}:${time}`,
-    raw: message,
-    source: "sse",
-    sourceName: "实时流",
-    path: "sse",
-    fileName: "实时日志流",
-    fileMtime: time / 1000,
-    lineIndex: index,
-    lineNumber: index + 1,
-    globalIndex: 0,
-    timestamp: time,
-    scope: raw.type || "",
-    rawLevel: raw.level || "",
-    level,
-    levelSource: "SSE",
-    moduleName,
-    message: message,
-    summary: compactText(message, 520),
-    trace: null,
-  };
-}
-
 export function buildLogEntries(files) {
   pruneFileEntryCache(files);
   const entries = [];
   files.forEach((file) => {
     buildFileLogEntries(file).forEach((entry) => entries.push(entry));
   });
-  const sseEntries = (state.logCache.sseEntries || []).map((raw, idx) => parseSSELogEntry(raw, idx));
-  entries.push(...sseEntries);
   entries.forEach((entry, index) => {
     entry.globalIndex = index;
   });

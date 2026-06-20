@@ -2,7 +2,7 @@
 // UI 交互
 // ============================================================================
 
-import { state } from "./state.js?v=20260620-renderfix1";
+import { state } from "./state.js?v=20260620-sessionlive1";
 import {
   SIDEBAR_COLLAPSED_KEY,
   COMPACT_KEY,
@@ -11,14 +11,14 @@ import {
   NOTIFY_COOLDOWN_MS,
   NOTIFY_LAST_KEY,
   SHORTCUT_KEY_LABELS,
-} from "./config.js?v=20260620-renderfix1";
-import { formatBytes, formatPercent, shortUptime, usageKind, diagnosticLabel, formatCompactLogTime } from "./utils/format.js?v=20260620-renderfix1";
+} from "./config.js?v=20260620-sessionlive1";
+import { formatBytes, formatPercent, shortUptime, usageKind, diagnosticLabel, formatCompactLogTime } from "./utils/format.js?v=20260620-sessionlive1";
 import {
   $,
   setText,
   toast,
-} from "./utils/dom.js?v=20260620-renderfix1";
-import { compactText } from "./utils/log-text.js?v=20260620-renderfix1";
+} from "./utils/dom.js?v=20260620-sessionlive1";
+import { compactText } from "./utils/log-text.js?v=20260620-sessionlive1";
 
 // ============================================================================
 // 侧边栏折叠（2.1）
@@ -614,6 +614,7 @@ export function buildDiagnosticReport() {
   if (insights) {
     lines.push(`## 会话与工具统计`);
     lines.push("");
+    lines.push(`- 有效会话：${insights.sessions?.length || 0}`);
     lines.push(`- 活动会话：${insights.runningSessions?.length || 0}`);
     lines.push(`- 运行中工具：${insights.runningTools?.length || 0}`);
     lines.push(`- 慢请求：${insights.slowCount || 0}`);
@@ -741,7 +742,7 @@ export function removeLoadingState(element) {
   }
 }
 
-import { renderDetailPanel } from "./components/event-list.js?v=20260620-renderfix1";
+import { renderDetailPanel } from "./components/event-list.js?v=20260620-sessionlive1";
 
 // ============================================================================
 // 详情面板
@@ -749,7 +750,9 @@ import { renderDetailPanel } from "./components/event-list.js?v=20260620-renderf
 
 export function closeDetailPanel() {
   state.selectedEventId = "";
+  state.selectedSessionId = "";
   renderDetailPanel();
+  renderLogsRef();
   // 移动端关闭详情面板
   document.querySelector(".workspace-detail")?.classList.remove("open");
   document.body.classList.remove("detail-open");
@@ -800,7 +803,7 @@ export function bindUI(actions) {
           e.preventDefault();
           logFilter.value = "";
           queueLogFilterRender();
-        } else if (state.selectedEventId) {
+        } else if (state.selectedEventId || state.selectedSessionId) {
           e.preventDefault();
           actions.closeDetailPanel();
         }
@@ -899,7 +902,7 @@ export function bindUI(actions) {
           e.preventDefault();
           logFilter.value = "";
           queueLogFilterRender();
-        } else if (state.selectedEventId) {
+        } else if (state.selectedEventId || state.selectedSessionId) {
           e.preventDefault();
           actions.closeDetailPanel();
         }
@@ -953,12 +956,4 @@ export function bindUI(actions) {
 
   initPanelDragDrop();
   bindExportReport();
-
-  const sseReconnectBtn = $("sseReconnectBtn");
-  if (sseReconnectBtn) {
-    sseReconnectBtn.addEventListener("click", () => {
-      actions.resetSSEBackoff();
-      actions.connectSSE();
-    });
-  }
 }

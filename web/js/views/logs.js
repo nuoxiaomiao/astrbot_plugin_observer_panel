@@ -2,19 +2,19 @@
 // 视图 - 日志分析
 // ============================================================================
 
-import { state } from "../state.js?v=20260620-renderfix1";
-import { DEFAULT_IMPORTANT_EVENT_LIMIT, IMPORTANT_EVENT_TYPES } from "../config.js?v=20260620-renderfix1";
-import { setText, renderWorkspaceChrome } from "../utils/dom.js?v=20260620-renderfix1";
-import { collectLogFiles } from "../log/cache.js?v=20260620-renderfix1";
-import { getLogAnalysis, filterLogEntries } from "../log/analytics.js?v=20260620-renderfix1";
+import { state } from "../state.js?v=20260620-sessionlive1";
+import { DEFAULT_IMPORTANT_EVENT_LIMIT, IMPORTANT_EVENT_TYPES } from "../config.js?v=20260620-sessionlive1";
+import { setText, renderWorkspaceChrome } from "../utils/dom.js?v=20260620-sessionlive1";
+import { collectLogFiles } from "../log/cache.js?v=20260620-sessionlive1";
+import { getLogAnalysis, filterLogEntries } from "../log/analytics.js?v=20260620-sessionlive1";
 import {
   renderEventList,
   filterEvents,
   renderDetailPanel,
-} from "../components/event-list.js?v=20260620-renderfix1";
-import { renderLogStream } from "../components/log-list.js?v=20260620-renderfix1";
-import { renderOverviewTrace } from "./overview.js?v=20260620-renderfix1";
-import { renderAstrBotVisuals } from "./astrbot.js?v=20260620-renderfix1";
+} from "../components/event-list.js?v=20260620-sessionlive1";
+import { renderLogStream } from "../components/log-list.js?v=20260620-sessionlive1";
+import { renderOverviewTrace } from "./overview.js?v=20260620-sessionlive1";
+import { renderAstrBotVisuals } from "./astrbot.js?v=20260620-sessionlive1";
 
 export function renderLogs() {
   const files = collectLogFiles();

@@ -2,8 +2,8 @@
 // 工具函数 - 网络请求
 // ============================================================================
 
-import { state } from "./state.js?v=20260620-renderfix1";
-import { token } from "./config.js?v=20260620-renderfix1";
+import { state } from "./state.js?v=20260620-sessionlive1";
+import { token } from "./config.js?v=20260620-sessionlive1";
 
 export function withToken(path) {
   const url = new URL(path, window.location.origin);
@@ -44,11 +44,8 @@ export function logCursorPayload() {
     }));
 }
 
-export function logsApiPath(forceFile = false) {
+export function logsApiPath() {
   const params = new URLSearchParams({ source: "astrbot" });
-  if (forceFile) {
-    params.set("force_file", "1");
-  }
   const cursor = logCursorPayload();
   if (cursor.length) {
     params.set("cursor", JSON.stringify(cursor));

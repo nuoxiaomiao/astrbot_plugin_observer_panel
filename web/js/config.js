@@ -118,12 +118,6 @@ export const DEFAULT_IMPORTANT_EVENT_LIMIT = 80;
 export const DEFAULT_LOG_PAGE_SIZE = 80;
 export const DEFAULT_RAW_CLIP_LENGTH = 5000;
 
-// SSE 重连退避
-export const SSE_MIN_BACKOFF = 1000;
-export const SSE_MAX_BACKOFF = 30000;
-export const SSE_BACKOFF_MULTIPLIER = 2;
-export const SSE_HEALTH_CHECK_TIMEOUT = 5000;
-
 // 浏览器通知
 export const NOTIFY_COOLDOWN_MS = 60 * 1000;
 export const NOTIFY_LAST_KEY = "op_last_notify_ts";

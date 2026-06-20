@@ -2,7 +2,7 @@
 // 工具函数 - 格式化
 // ============================================================================
 
-import { DIAGNOSTIC_LEVELS } from "../config.js?v=20260620-renderfix1";
+import { DIAGNOSTIC_LEVELS } from "../config.js?v=20260620-sessionlive1";
 
 /**
  * 格式化字节大小
