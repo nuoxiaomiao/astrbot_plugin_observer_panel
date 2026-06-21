@@ -35,6 +35,13 @@
 }
 
 /* ── Session Card ── */
+/*
+  动画设计理念：
+  - 静态标记 > 动态动画：先让用户通过颜色一眼识别状态
+  - 动画只用做对静态标记的轻柔补充，告诉用户"这件事还在进行"
+  - running 和 generating 的区别不仅是颜色，还要通过动画频率传达活跃度差异
+*/
+
 .session-card {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -49,70 +56,86 @@
     transform var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out);
   box-shadow: var(--shadow-subtle);
-}
-
-/* 通用 live 状态 — 左侧色条 */
-.session-card.is-live {
   position: relative;
-  overflow: hidden;
 }
 
-.session-card.is-live::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--muted-dark);
-  opacity: 0.35;
-  transition: opacity var(--duration) var(--ease-out), background var(--duration) var(--ease-out);
-  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-}
+/* -------- 静态状态标记 -------- */
 
-/* 进行中 — 蓝色 */
-.session-card.is-live.is-running {
-  border-color: rgba(113, 183, 255, 0.24);
-  background: var(--surface-2);
-  animation: liveBorderPulse 2.8s ease-in-out infinite;
-}
-
-.session-card.is-live.is-running::after {
-  background: var(--info-bright);
-  opacity: 0.7;
-  animation: liveBarGlow 2.8s ease-in-out infinite;
-}
-
-/* 生成中 — 琥珀色 */
-.session-card.is-live.is-generating {
-  border-color: rgba(227, 179, 65, 0.24);
-  background: var(--surface-2);
-  animation: liveBorderPulse 2.8s ease-in-out infinite;
-}
-
-.session-card.is-live.is-generating::after {
-  background: var(--warn-bright);
-  opacity: 0.7;
-  animation: liveBarGlow 2.8s ease-in-out infinite;
-}
-
-/* live 卡片微光扫过（通道隔离用 ::before） */
+/* 左侧色条 — 所有 live 会话（running / generating）通用 */
 .session-card.is-live::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: -120%;
-  width: 60%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.03), transparent);
-  animation: sweepShimmer 3.6s ease-in-out infinite;
-  animation-delay: var(--stagger, 0s);
-  pointer-events: none;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--muted-dark);
+  opacity: 0.35;
+  transition: opacity 0.25s ease, background 0.25s ease;
 }
 
-.session-card.is-new {
-  animation: sessionCardSlideIn 0.32s var(--ease-out) both;
+/* 进行中 — 冷静蓝 */
+.session-card.is-live.is-running {
+  border-color: rgba(113, 183, 255, 0.25);
 }
+
+.session-card.is-live.is-running::before {
+  background: #71b7ff;
+  opacity: 0.9;
+}
+
+/* 生成中 — 活跃琥珀 */
+.session-card.is-live.is-generating {
+  border-color: rgba(227, 179, 65, 0.28);
+}
+
+.session-card.is-live.is-generating::before {
+  background: #e3b341;
+  opacity: 0.9;
+}
+
+/* -------- 状态呼吸动画 -------- */
+/* 用 inset box-shadow 制造柔和的内发光，不干扰外边距布局 */
+
+@keyframes softBreathe {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0px var(--glow-outer),
+      inset 0 0 20px -12px var(--glow-inner);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.5px var(--glow-outer),
+      inset 0 0 28px -8px var(--glow-inner);
+  }
+}
+
+.session-card.is-live.is-running,
+.session-card.is-live.is-generating {
+  animation: softBreathe var(--breathe-speed, 2.8s) ease-in-out infinite;
+}
+
+/* running: 更慢、更柔和 */
+.session-card.is-live.is-running {
+  --glow-outer: rgba(113, 183, 255, 0.08);
+  --glow-inner: rgba(113, 183, 255, 0.04);
+  --breathe-speed: 3.2s;
+}
+
+/* generating: 更快、更明显 */
+.session-card.is-live.is-generating {
+  --glow-outer: rgba(227, 179, 65, 0.12);
+  --glow-inner: rgba(227, 179, 65, 0.06);
+  --breathe-speed: 2.2s;
+}
+
+/* hover 暂停动画，给交互让路 */
+.session-card.is-live:hover {
+  animation-play-state: paused;
+}
+
+/* -------- 基础交互 -------- */
 
 .session-card:hover {
   border-color: var(--line-strong);
@@ -121,25 +144,17 @@
   box-shadow: var(--shadow-hover);
 }
 
+.session-card.is-new {
+  animation: sessionCardSlideIn 0.32s var(--ease-out) both;
+}
+
 .session-card.selected {
   border-color: var(--info-bright);
   background: rgba(76, 154, 255, 0.08);
   box-shadow: 0 0 0 2px rgba(113, 183, 255, 0.18);
 }
 
-/* hover 时暂停 live 动画，避免与 hover 样式冲突 */
-.session-card.is-live:hover {
-  animation-play-state: paused;
-}
-
-.session-card.is-live:hover::after {
-  animation-play-state: paused;
-  opacity: 1;
-}
-
-.session-card.is-live:hover::before {
-  animation-play-state: paused;
-}
+/* -------- 卡片内部布局 -------- */
 
 .session-card-head {
   display: grid;
@@ -188,6 +203,8 @@
   font-size: 11px;
 }
 
+/* -------- Live Badge -------- */
+
 .session-status-cluster {
   display: inline-flex;
   align-items: center;
@@ -223,6 +240,8 @@
 .session-live-copy.is-generating {
   background-image: linear-gradient(90deg, rgba(227, 179, 65, 0.42) 0%, #fff6d6 40%, rgba(227, 179, 65, 0.42) 100%);
 }
+
+/* ─── Overview & Journey ─── */
 
 .session-detail {
   min-height: 260px;
@@ -299,6 +318,8 @@
   font-size: 13px;
   overflow-wrap: anywhere;
 }
+
+/* ─── Flow ─── */
 
 .session-flow-wrap {
   padding: 16px;
@@ -389,14 +410,15 @@
   background: var(--danger-bright);
 }
 
+/* 流程节点的活动状态点 */
 .session-flow-step.running.is-generating .session-flow-dot {
   box-shadow: 0 0 0 5px rgba(227, 179, 65, 0.1);
-  animation: sessionDotPulseAmber 1.6s ease-in-out infinite;
+  animation: nodePulseAmber 2s ease-in-out infinite;
 }
 
 .session-flow-step.running.is-running .session-flow-dot {
   box-shadow: 0 0 0 5px rgba(113, 183, 255, 0.1);
-  animation: sessionDotPulseBlue 1.6s ease-in-out infinite;
+  animation: nodePulseBlue 2s ease-in-out infinite;
 }
 
 .session-flow-main {
@@ -458,6 +480,14 @@
   line-height: 1.5;
 }
 
+/* ─── Live Status Card ─── */
+/*
+  实时状态卡片的动画策略：
+  - 用一个统一的呼吸动画，通过 CSS 变量传递颜色
+  - 动画只改变 box-shadow 和 border-color，保持轻量
+  - 顶部色条作为额外的静态状态提示
+*/
+
 .session-live-wrap {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -474,27 +504,39 @@
   font-size: 15px;
 }
 
-/* ── Live Status Card ── */
 .session-live-card {
   position: relative;
-  border: 1px solid rgba(113, 183, 255, 0.22);
+  border: 1px solid var(--card-border, rgba(113, 183, 255, 0.22));
   border-radius: var(--radius-lg);
-  background: rgba(113, 183, 255, 0.04);
+  background: var(--card-bg, rgba(113, 183, 255, 0.04));
   padding: 18px;
   display: grid;
   gap: 14px;
   overflow: hidden;
   transition: border-color var(--duration) var(--ease-out),
               background var(--duration) var(--ease-out);
-  animation: liveBorderPulse 2.8s ease-in-out infinite;
+  animation: softBreathe var(--card-breathe, 3.2s) ease-in-out infinite;
 }
 
+/* running 状态变量 */
+.session-live-card:not(.is-generating) {
+  --card-border: rgba(113, 183, 255, 0.22);
+  --card-bg: rgba(113, 183, 255, 0.04);
+  --glow-outer: rgba(113, 183, 255, 0.08);
+  --glow-inner: rgba(113, 183, 255, 0.04);
+  --card-breathe: 3.2s;
+}
+
+/* generating 状态变量 */
 .session-live-card.is-generating {
-  border-color: rgba(227, 179, 65, 0.24);
-  background: rgba(227, 179, 65, 0.05);
+  --card-border: rgba(227, 179, 65, 0.22);
+  --card-bg: rgba(227, 179, 65, 0.05);
+  --glow-outer: rgba(227, 179, 65, 0.12);
+  --glow-inner: rgba(227, 179, 65, 0.06);
+  --card-breathe: 2.4s;
 }
 
-/* 顶部色带 */
+/* 顶部色条 */
 .session-live-card::after {
   content: "";
   position: absolute;
@@ -502,13 +544,17 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: rgba(113, 183, 255, 0.35);
+  background: var(--bar-color, #71b7ff);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .session-live-card.is-generating::after {
-  background: rgba(227, 179, 65, 0.35);
+  --bar-color: #e3b341;
 }
+
+/* 统一使用 softBreathe 定义在上方 */
+
+/* --- 内部布局 --- */
 
 .session-live-head {
   display: flex;
@@ -566,7 +612,9 @@
   animation: sessionLivePulse 0.5s var(--ease-out);
 }
 
-/* ── Keyframes ── */
+/* ═════════════════════════════════════════════
+   Keyframes
+   ═════════════════════════════════════════════ */
 
 @keyframes sessionLivePulse {
   0% {
@@ -612,63 +660,34 @@
   }
 }
 
-@keyframes sessionDotPulseBlue {
+/* 流程节点脉冲 — 蓝色 */
+@keyframes nodePulseBlue {
   0%, 100% {
-    box-shadow: 0 0 0 5px rgba(113, 183, 255, 0.1);
-    opacity: 1;
+    box-shadow: 0 0 0 4px rgba(113, 183, 255, 0.12);
+    transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 0 10px rgba(113, 183, 255, 0.02);
-    opacity: 0.7;
+    box-shadow: 0 0 0 8px rgba(113, 183, 255, 0.03);
+    transform: scale(1.05);
   }
 }
 
-@keyframes sessionDotPulseAmber {
+/* 流程节点脉冲 — 琥珀色 */
+@keyframes nodePulseAmber {
   0%, 100% {
-    box-shadow: 0 0 0 5px rgba(227, 179, 65, 0.1);
-    opacity: 1;
+    box-shadow: 0 0 0 4px rgba(227, 179, 65, 0.12);
+    transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 0 10px rgba(227, 179, 65, 0.02);
-    opacity: 0.7;
+    box-shadow: 0 0 0 8px rgba(227, 179, 65, 0.03);
+    transform: scale(1.05);
   }
 }
 
-/* 通用 live 边框脉冲 — 用于 session-card 和 live-card */
-@keyframes liveBorderPulse {
-  0%, 100% {
-    box-shadow: 0 0 0 1px rgba(113, 183, 255, 0.15), 0 0 12px -6px rgba(113, 183, 255, 0.04);
-    border-color: rgba(113, 183, 255, 0.22);
-  }
-  50% {
-    box-shadow: 0 0 0 3px rgba(113, 183, 255, 0.08), 0 0 18px -3px rgba(113, 183, 255, 0.1);
-    border-color: rgba(113, 183, 255, 0.38);
-  }
-}
-
-/* 左侧色条发光 */
-@keyframes liveBarGlow {
-  0%, 100% {
-    opacity: 0.5;
-    box-shadow: 0 0 4px -1px currentColor;
-  }
-  50% {
-    opacity: 1;
-    box-shadow: 0 0 10px 0px currentColor;
-  }
-}
-
-/* 微光扫过 */
-@keyframes sweepShimmer {
-  0% {
-    left: -120%;
-  }
-  100% {
-    left: 200%;
-  }
-}
-
-/* ── Responsive ── */
+/* softBreathe 定义在文件上方 */
+/* ═════════════════════════════════════════════
+   Responsive
+   ═════════════════════════════════════════════ */
 
 @media (max-width: 1180px) {
   .session-overview-meta {
