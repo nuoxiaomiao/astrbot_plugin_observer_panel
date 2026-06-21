@@ -2,18 +2,18 @@
 // 入口文件
 // ============================================================================
 
-console.log("[ObserverPanel] main.js loaded, build 20260620-sessionlive1");
+console.log("[ObserverPanel] main.js loaded, build 20260621-flow3");
 
-import { state } from "./state.js?v=20260620-sessionlive1";
-import { fetchJson, logsApiPath } from "./api.js?v=20260620-sessionlive1";
-import { applyPublicConfig, renderWorkspaceChrome, toast } from "./utils/dom.js?v=20260620-sessionlive1";
-import { renderSummary } from "./views/overview.js?v=20260620-sessionlive1";
-import { renderSystem } from "./views/system.js?v=20260620-sessionlive1";
-import { renderAstrBot } from "./views/astrbot.js?v=20260620-sessionlive1";
-import { renderLogs } from "./views/logs.js?v=20260620-sessionlive1";
-import { bindUI, promptNotificationPermission, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode } from "./ui.js?v=20260620-sessionlive1";
-import { initEventListActions } from "./components/event-list.js?v=20260620-sessionlive1";
-import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260620-sessionlive1";
+import { state } from "./state.js?v=20260621-flow3";
+import { fetchJson, logsApiPath } from "./api.js?v=20260621-flow3";
+import { applyPublicConfig, renderWorkspaceChrome, toast } from "./utils/dom.js?v=20260621-flow3";
+import { renderSummary } from "./views/overview.js?v=20260621-flow3";
+import { renderSystem } from "./views/system.js?v=20260621-flow3";
+import { renderAstrBot } from "./views/astrbot.js?v=20260621-flow3";
+import { renderLogs } from "./views/logs.js?v=20260621-flow3";
+import { bindUI, promptNotificationPermission, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode } from "./ui.js?v=20260621-flow3";
+import { initEventListActions } from "./components/event-list.js?v=20260621-flow3";
+import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260621-flow3";
 
 function logTailLimit() {
   return Math.max(20, Number(state.config?.astrbot?.tail_lines || 300));

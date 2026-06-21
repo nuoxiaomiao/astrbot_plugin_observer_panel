@@ -13,11 +13,11 @@
 
 .session-visual-layout {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  gap: 18px;
   padding: 16px;
-  min-height: 520px;
-  animation: viewFadeIn var(--duration-normal) var(--ease-out);
+  min-height: 540px;
+  align-items: start;
 }
 
 .session-list,
@@ -28,161 +28,152 @@
 .session-list {
   display: grid;
   align-content: start;
-  gap: 12px;
+  gap: 10px;
   max-height: 76vh;
   overflow: auto;
   padding-right: 4px;
 }
 
+/* ── Session Card ── */
 .session-card {
-  position: relative;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface-2);
-  padding: 14px;
+  padding: 12px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   text-align: left;
+  cursor: pointer;
   transition:
     var(--transition),
-    transform var(--duration-normal) var(--ease-out),
-    box-shadow var(--duration-normal) var(--ease-out);
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
   box-shadow: var(--shadow-subtle);
-  animation: fadeInUp var(--duration-normal) var(--ease-out) backwards;
+}
+
+/* 通用 live 状态 — 左侧色条 */
+.session-card.is-live {
+  position: relative;
   overflow: hidden;
+}
+
+.session-card.is-live::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--muted-dark);
+  opacity: 0.35;
+  transition: opacity var(--duration) var(--ease-out), background var(--duration) var(--ease-out);
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+/* 进行中 — 蓝色 */
+.session-card.is-live.is-running {
+  border-color: rgba(113, 183, 255, 0.24);
+  background: var(--surface-2);
+  animation: liveBorderPulse 2.8s ease-in-out infinite;
+}
+
+.session-card.is-live.is-running::after {
+  background: var(--info-bright);
+  opacity: 0.7;
+  animation: liveBarGlow 2.8s ease-in-out infinite;
+}
+
+/* 生成中 — 琥珀色 */
+.session-card.is-live.is-generating {
+  border-color: rgba(227, 179, 65, 0.24);
+  background: var(--surface-2);
+  animation: liveBorderPulse 2.8s ease-in-out infinite;
+}
+
+.session-card.is-live.is-generating::after {
+  background: var(--warn-bright);
+  opacity: 0.7;
+  animation: liveBarGlow 2.8s ease-in-out infinite;
+}
+
+/* live 卡片微光扫过（通道隔离用 ::before） */
+.session-card.is-live::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.03), transparent);
+  animation: sweepShimmer 3.6s ease-in-out infinite;
+  animation-delay: var(--stagger, 0s);
+  pointer-events: none;
+}
+
+.session-card.is-new {
+  animation: sessionCardSlideIn 0.32s var(--ease-out) both;
 }
 
 .session-card:hover {
   border-color: var(--line-strong);
   background: var(--surface-3);
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   box-shadow: var(--shadow-hover);
 }
 
 .session-card.selected {
   border-color: var(--info-bright);
-  box-shadow: 0 0 0 2px rgba(113, 183, 255, 0.2);
   background: rgba(76, 154, 255, 0.08);
-  transform: translateY(-2px);
+  box-shadow: 0 0 0 2px rgba(113, 183, 255, 0.18);
 }
 
-.session-card::before,
-.session-detail-section::before,
-.session-timeline-item::before,
-.session-tool-item::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease-out);
+/* hover 时暂停 live 动画，避免与 hover 样式冲突 */
+.session-card.is-live:hover {
+  animation-play-state: paused;
 }
 
-.session-card.is-live::before,
-.session-detail-section.is-live::before,
-.session-timeline-item.is-live-latest::before,
-.session-tool-item.is-live::before {
+.session-card.is-live:hover::after {
+  animation-play-state: paused;
   opacity: 1;
 }
 
-.session-card.is-live.is-running::before,
-.session-detail-section.is-live.is-running::before,
-.session-timeline-item.is-live-latest.is-running::before {
-  background:
-    linear-gradient(120deg, rgba(161, 119, 237, 0) 12%, rgba(161, 119, 237, 0.12) 46%, rgba(113, 183, 255, 0.2) 50%, rgba(161, 119, 237, 0.12) 54%, rgba(161, 119, 237, 0) 88%);
-  animation: sessionLiveSweep 2.6s linear infinite;
-}
-
-.session-card.is-live.is-generating::before,
-.session-detail-section.is-live.is-generating::before,
-.session-timeline-item.is-live-latest.is-generating::before,
-.session-tool-item.is-live.is-generating::before {
-  background:
-    linear-gradient(120deg, rgba(227, 179, 65, 0) 12%, rgba(227, 179, 65, 0.12) 46%, rgba(227, 179, 65, 0.24) 50%, rgba(227, 179, 65, 0.12) 54%, rgba(227, 179, 65, 0) 88%);
-  animation: sessionLiveSweep 2.1s linear infinite;
-}
-
-.session-card.is-live {
-  border-color: rgba(113, 183, 255, 0.38);
-  box-shadow: 0 0 0 1px rgba(113, 183, 255, 0.12), var(--shadow-card);
-}
-
-.session-card.is-live.is-generating {
-  border-color: rgba(227, 179, 65, 0.42);
-  box-shadow: 0 0 0 1px rgba(227, 179, 65, 0.12), var(--shadow-card);
-}
-
-.session-card.is-live .session-card-title small,
-.session-detail-live .session-detail-head p {
-  color: var(--text);
-}
-
-.session-card:nth-child(1) { animation-delay: 0.03s; }
-.session-card:nth-child(2) { animation-delay: 0.06s; }
-.session-card:nth-child(3) { animation-delay: 0.09s; }
-.session-card:nth-child(4) { animation-delay: 0.12s; }
-.session-card:nth-child(5) { animation-delay: 0.15s; }
-.session-card:nth-child(n+6) { animation-delay: 0.18s; }
-
-.session-card .badge.debug,
-.session-detail-head .badge.debug {
-  animation: sessionStatusPulse 1.8s ease-in-out infinite;
-}
-
-.session-status-cluster {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.session-live-indicator {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 0 rgba(113, 183, 255, 0.32);
-  animation: sessionLiveDot 1.5s ease-in-out infinite;
-}
-
-.session-live-indicator.is-running {
-  background: var(--info-bright);
-}
-
-.session-live-indicator.is-generating {
-  background: var(--warn-bright);
-  box-shadow: 0 0 0 0 rgba(227, 179, 65, 0.3);
+.session-card.is-live:hover::before {
+  animation-play-state: paused;
 }
 
 .session-card-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
+  display: grid;
+  gap: 6px;
 }
 
 .session-card-title {
   min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .session-card-title strong {
   color: var(--text-bright);
   font-size: 14px;
+  line-height: 1.3;
 }
 
 .session-card-title small {
   color: var(--muted-dark);
   font-size: 11px;
+  line-height: 1.4;
+}
+
+.session-card-status {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .session-card-message {
   margin: 0;
   color: var(--text);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.65;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -192,293 +183,506 @@
 .session-card-footer {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   color: var(--muted-dark);
   font-size: 11px;
+}
+
+.session-status-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-.session-detail {
-  display: grid;
-  align-content: start;
-  gap: 12px;
-  min-height: 200px;
+.session-live-badge {
+  border-color: rgba(113, 183, 255, 0.28);
+  background: rgba(113, 183, 255, 0.06);
 }
 
-.session-detail-section {
-  position: relative;
+.session-live-badge.is-generating {
+  border-color: rgba(227, 179, 65, 0.3);
+  background: rgba(227, 179, 65, 0.08);
+}
+
+.session-live-text,
+.session-live-copy {
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sessionTextStream 1.85s linear infinite;
+}
+
+.session-live-text.is-running,
+.session-live-copy.is-running {
+  background-image: linear-gradient(90deg, rgba(113, 183, 255, 0.42) 0%, #f4fbff 40%, rgba(113, 183, 255, 0.42) 100%);
+}
+
+.session-live-text.is-generating,
+.session-live-copy.is-generating {
+  background-image: linear-gradient(90deg, rgba(227, 179, 65, 0.42) 0%, #fff6d6 40%, rgba(227, 179, 65, 0.42) 100%);
+}
+
+.session-detail {
+  min-height: 260px;
+}
+
+.session-journey {
+  display: grid;
+  gap: 14px;
+}
+
+.session-overview-card,
+.session-flow-wrap {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: var(--surface-2);
-  padding: 14px;
-  display: grid;
-  gap: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.015) 100%);
   box-shadow: var(--shadow-subtle);
-  animation: sessionPanelReveal var(--duration-normal) var(--ease-out) backwards;
-  overflow: hidden;
 }
 
-.session-detail-section.is-live {
-  border-color: rgba(113, 183, 255, 0.34);
+.session-overview-card {
+  padding: 16px;
+  display: grid;
+  gap: 14px;
 }
 
-.session-detail-section.is-live.is-generating {
-  border-color: rgba(227, 179, 65, 0.34);
+.session-overview-card.is-live {
+  border-color: rgba(113, 183, 255, 0.3);
 }
 
-.session-detail-section:nth-child(1) { animation-delay: 0.02s; }
-.session-detail-section:nth-child(2) { animation-delay: 0.05s; }
-.session-detail-section:nth-child(3) { animation-delay: 0.08s; }
-.session-detail-section:nth-child(4) { animation-delay: 0.11s; }
-.session-detail-section:nth-child(5) { animation-delay: 0.14s; }
-.session-detail-section:nth-child(6) { animation-delay: 0.17s; }
+.session-overview-card.is-live.is-generating {
+  border-color: rgba(227, 179, 65, 0.3);
+}
 
-.session-detail-head {
+.session-overview-head {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
   gap: 12px;
+  align-items: flex-start;
 }
 
-.session-detail-head h3 {
+.session-overview-head h3 {
   margin: 0;
   color: var(--text-bright);
-  font-size: 16px;
+  font-size: 18px;
 }
 
-.session-detail-head p {
-  margin: 4px 0 0;
+.session-overview-head p {
+  margin: 6px 0 0;
   color: var(--muted-dark);
   font-size: 12px;
 }
 
-.session-detail-section > h3 {
-  margin: 0;
-  color: var(--text-bright);
-  font-size: 14px;
-}
-
-.session-detail-text {
-  margin: 0;
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.session-kv-grid {
+.session-overview-meta {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
-.session-kv-row {
+.session-overview-chip {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.025);
   padding: 10px 12px;
   display: grid;
   gap: 4px;
-  transition:
-    var(--transition),
-    transform var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out);
 }
 
-.session-kv-row:hover {
-  border-color: rgba(255, 255, 255, 0.1);
-  transform: translateY(-1px);
-}
-
-.session-kv-row span {
+.session-overview-chip span {
   color: var(--muted-dark);
   font-size: 11px;
 }
 
-.session-kv-row strong {
+.session-overview-chip strong {
   color: var(--text-bright);
   font-size: 13px;
   overflow-wrap: anywhere;
 }
 
-.session-tool-list,
-.session-timeline {
+.session-flow-wrap {
+  padding: 16px;
   display: grid;
-  gap: 10px;
+  gap: 14px;
 }
 
-.session-tool-item,
-.session-timeline-item {
+.session-flow-wrap > h3 {
+  margin: 0;
+  color: var(--text-bright);
+  font-size: 15px;
+}
+
+.session-flow {
+  display: grid;
+  gap: 0;
+}
+
+.session-flow-step {
+  --flow-line: rgba(255, 255, 255, 0.08);
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.session-flow-step + .session-flow-step {
+  margin-top: 2px;
+}
+
+.session-flow-step.is-new {
+  opacity: 0;
+  transform: translateY(14px) scale(0.985);
+  animation: sessionStepSlideIn 0.42s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  animation-delay: var(--step-delay, 0s);
+}
+
+.session-flow-rail {
   position: relative;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.025);
-  padding: 12px;
-  transition:
-    var(--transition),
-    transform var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out);
-  animation: sessionItemReveal var(--duration-normal) var(--ease-out) backwards;
+  min-height: 100%;
+  display: flex;
+  justify-content: center;
 }
 
-.session-tool-item:hover,
-.session-timeline-item:hover {
-  transform: translateX(2px);
-  border-color: rgba(255, 255, 255, 0.12);
+.session-flow-rail::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: -8px;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--flow-line);
 }
 
-.session-tool-item:nth-child(1),
-.session-timeline-item:nth-child(1) { animation-delay: 0.02s; }
-.session-tool-item:nth-child(2),
-.session-timeline-item:nth-child(2) { animation-delay: 0.05s; }
-.session-tool-item:nth-child(3),
-.session-timeline-item:nth-child(3) { animation-delay: 0.08s; }
-.session-tool-item:nth-child(4),
-.session-timeline-item:nth-child(4) { animation-delay: 0.11s; }
-.session-tool-item:nth-child(n+5),
-.session-timeline-item:nth-child(n+5) { animation-delay: 0.14s; }
-
-.session-tool-item .badge.warn {
-  animation: toolRunningPulse 1.35s ease-in-out infinite;
+.session-flow-step:last-child .session-flow-rail::before {
+  bottom: 18px;
 }
 
-.session-tool-item.is-live,
-.session-timeline-item.is-live-latest {
-  border-color: rgba(227, 179, 65, 0.28);
-  background: linear-gradient(180deg, rgba(227, 179, 65, 0.06) 0%, rgba(255, 255, 255, 0.025) 100%);
+.session-flow-dot {
+  position: relative;
+  z-index: 1;
+  margin-top: 18px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--muted-dark);
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.03);
 }
 
-.session-timeline-item.is-live-latest.is-running {
-  border-color: rgba(113, 183, 255, 0.28);
-  background: linear-gradient(180deg, rgba(113, 183, 255, 0.06) 0%, rgba(255, 255, 255, 0.025) 100%);
+.session-flow-step.message .session-flow-dot,
+.session-flow-step.context .session-flow-dot,
+.session-flow-step.done .session-flow-dot {
+  background: var(--accent-bright);
 }
 
-.session-tool-head,
-.session-timeline-head {
+.session-flow-step.request .session-flow-dot,
+.session-flow-step.running .session-flow-dot {
+  background: var(--info-bright);
+}
+
+.session-flow-step.tool .session-flow-dot {
+  background: var(--warn-bright);
+}
+
+.session-flow-step.error .session-flow-dot {
+  background: var(--danger-bright);
+}
+
+.session-flow-step.running.is-generating .session-flow-dot {
+  box-shadow: 0 0 0 5px rgba(227, 179, 65, 0.1);
+  animation: sessionDotPulseAmber 1.6s ease-in-out infinite;
+}
+
+.session-flow-step.running.is-running .session-flow-dot {
+  box-shadow: 0 0 0 5px rgba(113, 183, 255, 0.1);
+  animation: sessionDotPulseBlue 1.6s ease-in-out infinite;
+}
+
+.session-flow-main {
+  border-radius: var(--radius-lg);
+  padding: 14px 14px 16px;
+  background: rgba(255, 255, 255, 0.022);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 12px;
+}
+
+.session-flow-step.running .session-flow-main {
+  border-color: rgba(113, 183, 255, 0.18);
+  background: rgba(113, 183, 255, 0.04);
+}
+
+.session-flow-step.running.is-generating .session-flow-main,
+.session-flow-step.tool.running .session-flow-main {
+  border-color: rgba(227, 179, 65, 0.18);
+  background: rgba(227, 179, 65, 0.04);
+}
+
+.session-flow-step.error .session-flow-main {
+  border-color: rgba(248, 81, 73, 0.2);
+  background: rgba(248, 81, 73, 0.04);
+}
+
+.session-flow-head {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
   gap: 12px;
-  margin-bottom: 8px;
+  align-items: flex-start;
 }
 
-.session-tool-head strong,
-.session-timeline-head strong {
+.session-flow-title {
   color: var(--text-bright);
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-.session-tool-head small,
-.session-timeline-head small {
+.session-flow-body {
+  margin: 10px 0 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.session-flow-meta {
+  margin-top: 10px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.session-flow-meta small {
   color: var(--muted-dark);
   font-size: 11px;
+  line-height: 1.5;
 }
 
-.session-tool-meta {
+.session-live-wrap {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.015) 100%);
+  box-shadow: var(--shadow-subtle);
+  padding: 16px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 14px;
 }
 
-.session-code-block {
+.session-live-wrap > h3 {
   margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  color: var(--text);
-  font-family: var(--mono);
+  color: var(--text-bright);
+  font-size: 15px;
+}
+
+/* ── Live Status Card ── */
+.session-live-card {
+  position: relative;
+  border: 1px solid rgba(113, 183, 255, 0.22);
+  border-radius: var(--radius-lg);
+  background: rgba(113, 183, 255, 0.04);
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  overflow: hidden;
+  transition: border-color var(--duration) var(--ease-out),
+              background var(--duration) var(--ease-out);
+  animation: liveBorderPulse 2.8s ease-in-out infinite;
+}
+
+.session-live-card.is-generating {
+  border-color: rgba(227, 179, 65, 0.24);
+  background: rgba(227, 179, 65, 0.05);
+}
+
+/* 顶部色带 */
+.session-live-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(113, 183, 255, 0.35);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.session-live-card.is-generating::after {
+  background: rgba(227, 179, 65, 0.35);
+}
+
+.session-live-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.session-live-title-wrap {
+  display: grid;
+  gap: 4px;
+}
+
+.session-live-phase {
+  color: var(--muted-dark);
   font-size: 11px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow: auto;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.session-tool-item .session-code-block + .session-code-block {
-  margin-top: 8px;
+.session-live-title {
+  color: var(--text-bright);
+  font-size: 16px;
+  line-height: 1.4;
 }
 
-.session-timeline-item p {
+.session-live-aside {
+  flex-shrink: 0;
+}
+
+.session-live-body {
   margin: 0;
   color: var(--text);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.75;
   white-space: pre-wrap;
   word-break: break-word;
+  min-height: 1.75em;
 }
 
-@keyframes sessionPanelReveal {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.session-live-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-@keyframes sessionItemReveal {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.session-live-meta small {
+  color: var(--muted-dark);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
-@keyframes sessionStatusPulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(193, 156, 255, 0.18);
-    transform: translateY(0);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(193, 156, 255, 0);
-    transform: translateY(-1px);
-  }
+.session-live-card.is-refreshing .session-live-title,
+.session-live-card.is-refreshing .session-live-body {
+  animation: sessionLivePulse 0.5s var(--ease-out);
 }
 
-@keyframes sessionLiveSweep {
+/* ── Keyframes ── */
+
+@keyframes sessionLivePulse {
   0% {
-    transform: translateX(-62%);
+    opacity: 0.35;
+    transform: translateY(3px);
+    filter: blur(1px);
   }
   100% {
-    transform: translateX(62%);
-  }
-}
-
-@keyframes sessionLiveDot {
-  0%, 100% {
     opacity: 1;
-    transform: scale(1);
-  }
-  55% {
-    opacity: 0.75;
-    transform: scale(1.18);
+    transform: translateY(0);
+    filter: blur(0);
   }
 }
 
-@keyframes toolRunningPulse {
+@keyframes sessionCardSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes sessionStepSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sessionTextStream {
+  0% {
+    background-position: 200% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes sessionDotPulseBlue {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(227, 179, 65, 0.18);
+    box-shadow: 0 0 0 5px rgba(113, 183, 255, 0.1);
+    opacity: 1;
   }
   50% {
-    box-shadow: 0 0 0 5px rgba(227, 179, 65, 0);
+    box-shadow: 0 0 0 10px rgba(113, 183, 255, 0.02);
+    opacity: 0.7;
   }
 }
 
-@media (max-width: 1080px) {
+@keyframes sessionDotPulseAmber {
+  0%, 100% {
+    box-shadow: 0 0 0 5px rgba(227, 179, 65, 0.1);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(227, 179, 65, 0.02);
+    opacity: 0.7;
+  }
+}
+
+/* 通用 live 边框脉冲 — 用于 session-card 和 live-card */
+@keyframes liveBorderPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(113, 183, 255, 0.15), 0 0 12px -6px rgba(113, 183, 255, 0.04);
+    border-color: rgba(113, 183, 255, 0.22);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(113, 183, 255, 0.08), 0 0 18px -3px rgba(113, 183, 255, 0.1);
+    border-color: rgba(113, 183, 255, 0.38);
+  }
+}
+
+/* 左侧色条发光 */
+@keyframes liveBarGlow {
+  0%, 100% {
+    opacity: 0.5;
+    box-shadow: 0 0 4px -1px currentColor;
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 10px 0px currentColor;
+  }
+}
+
+/* 微光扫过 */
+@keyframes sweepShimmer {
+  0% {
+    left: -120%;
+  }
+  100% {
+    left: 200%;
+  }
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 1180px) {
+  .session-overview-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
   .session-visual-layout {
     grid-template-columns: 1fr;
   }
 
   .session-list {
-    max-height: 340px;
+    max-height: 320px;
   }
 }
 
@@ -488,16 +692,17 @@
     gap: 12px;
   }
 
-  .session-kv-grid,
-  .session-tool-meta {
+  .session-overview-head,
+  .session-flow-head {
+    display: grid;
+  }
+
+  .session-overview-meta {
     grid-template-columns: 1fr;
   }
 
-  .session-card-head,
-  .session-detail-head,
-  .session-tool-head,
-  .session-timeline-head {
-    grid-template-columns: 1fr;
-    display: grid;
+  .session-flow-step {
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 10px;
   }
 }

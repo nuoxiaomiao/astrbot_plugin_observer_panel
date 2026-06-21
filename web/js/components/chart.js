@@ -2,7 +2,7 @@
 // 组件 - 条形图
 // ============================================================================
 
-import { renderSignature, emptyBlock } from "../utils/dom.js?v=20260620-sessionlive1";
+import { renderSignature, emptyBlock } from "../utils/dom.js?v=20260621-flow3";
 
 function chartSignature(items) {
   return [

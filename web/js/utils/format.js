@@ -2,7 +2,7 @@
 // 工具函数 - 格式化
 // ============================================================================
 
-import { DIAGNOSTIC_LEVELS } from "../config.js?v=20260620-sessionlive1";
+import { DIAGNOSTIC_LEVELS } from "../config.js?v=20260621-flow3";
 
 /**
  * 格式化字节大小

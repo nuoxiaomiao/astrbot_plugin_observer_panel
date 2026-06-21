@@ -2,7 +2,7 @@
 // 组件 - 仪表盘
 // ============================================================================
 
-import { formatPercent, usageKind } from "../utils/format.js?v=20260620-sessionlive1";
+import { formatPercent, usageKind } from "../utils/format.js?v=20260621-flow3";
 
 /**
  * 渲染资源使用率仪表盘

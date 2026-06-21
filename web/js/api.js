@@ -2,8 +2,8 @@
 // 工具函数 - 网络请求
 // ============================================================================
 
-import { state } from "./state.js?v=20260620-sessionlive1";
-import { token } from "./config.js?v=20260620-sessionlive1";
+import { state } from "./state.js?v=20260621-flow3";
+import { token } from "./config.js?v=20260621-flow3";
 
 export function withToken(path) {
   const url = new URL(path, window.location.origin);
