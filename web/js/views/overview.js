@@ -2,20 +2,20 @@
 // 视图 - 总览
 // ============================================================================
 
-import { state } from "../state.js?v=20260627-calm1";
-import { DIAGNOSTIC_LEVELS, IMPORTANT_EVENT_TYPES } from "../config.js?v=20260627-calm1";
-import { formatPercent, formatCompactLogTime, formatTime, shortUptime, usageKind } from "../utils/format.js?v=20260627-calm1";
+import { state } from "../state.js?v=20260627-calm2";
+import { DIAGNOSTIC_LEVELS, IMPORTANT_EVENT_TYPES } from "../config.js?v=20260627-calm2";
+import { formatPercent, formatCompactLogTime, formatTime, shortUptime, usageKind } from "../utils/format.js?v=20260627-calm2";
 import {
   $,
   setText,
   renderSignature,
   renderKv,
-} from "../utils/dom.js?v=20260627-calm1";
-import { compactText, compactJson } from "../utils/log-text.js?v=20260627-calm1";
-import { renderBarChart } from "../components/chart.js?v=20260627-calm1";
-import { animateFillWidth } from "../utils/motion.js?v=20260627-calm1";
-import { renderEventList } from "../components/event-list.js?v=20260627-calm1";
-import { checkDiagnosticNotifications } from "../ui.js?v=20260627-calm1";
+} from "../utils/dom.js?v=20260627-calm2";
+import { compactText, compactJson } from "../utils/log-text.js?v=20260627-calm2";
+import { renderBarChart } from "../components/chart.js?v=20260627-calm2";
+import { animateFillWidth } from "../utils/motion.js?v=20260627-calm2";
+import { renderEventList } from "../components/event-list.js?v=20260627-calm2";
+import { checkDiagnosticNotifications } from "../ui.js?v=20260627-calm2";
 
 function diagnosticLabel(status) {
   return DIAGNOSTIC_LEVELS[status]?.label || "未知";

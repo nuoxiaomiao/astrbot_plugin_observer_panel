@@ -2,7 +2,7 @@
 // 日志分析与 trace 洞察
 // ============================================================================
 
-import { state } from "../state.js?v=20260627-calm1";
+import { state } from "../state.js?v=20260627-calm2";
 import {
   DEFAULT_SLOW_SESSION_MS,
   DEFAULT_SLOW_TOOL_MS,
@@ -12,17 +12,17 @@ import {
   PLUG_MODULE_LABELS,
   TRACE_ACTION_LABELS,
   EVENT_TYPES,
-} from "../config.js?v=20260627-calm1";
-import { average } from "../utils/format.js?v=20260627-calm1";
+} from "../config.js?v=20260627-calm2";
+import { average } from "../utils/format.js?v=20260627-calm2";
 import {
   compactText,
   compactJson,
   safeObject,
   bracketParts,
-} from "../utils/log-text.js?v=20260627-calm1";
-import { getLogSearchText, detailKey, stableKeyText } from "../utils/dom.js?v=20260627-calm1";
-import { buildLogEntries } from "./parser.js?v=20260627-calm1";
-import { logFilesSignature, recentAnalysisEntries } from "./cache.js?v=20260627-calm1";
+} from "../utils/log-text.js?v=20260627-calm2";
+import { getLogSearchText, detailKey, stableKeyText } from "../utils/dom.js?v=20260627-calm2";
+import { buildLogEntries } from "./parser.js?v=20260627-calm2";
+import { logFilesSignature, recentAnalysisEntries } from "./cache.js?v=20260627-calm2";
 
 export function getLogAnalysis(files) {
   const signature = logFilesSignature(files);

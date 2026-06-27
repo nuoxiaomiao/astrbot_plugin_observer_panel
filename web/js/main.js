@@ -2,19 +2,19 @@
 // 入口文件
 // ============================================================================
 
-console.log("[ObserverPanel] main.js loaded, build 20260627-calm1");
+console.log("[ObserverPanel] main.js loaded, build 20260627-calm2");
 
-import { state } from "./state.js?v=20260627-calm1";
-import { fetchJson, logsApiPath, fetchQueue } from "./api.js?v=20260627-calm1";
-import { applyPublicConfig, renderWorkspaceChrome, toast } from "./utils/dom.js?v=20260627-calm1";
-import { renderSummary } from "./views/overview.js?v=20260627-calm1";
-import { renderSystem } from "./views/system.js?v=20260627-calm1";
-import { renderAstrBot } from "./views/astrbot.js?v=20260627-calm1";
-import { renderLogs } from "./views/logs.js?v=20260627-calm1";
-import { bindUI, promptNotificationPermission, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode, addLoadingState, removeLoadingState } from "./ui.js?v=20260627-calm1";
-import { initEventListActions } from "./components/event-list.js?v=20260627-calm1";
-import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260627-calm1";
-import { transitionViews } from "./utils/motion.js?v=20260627-calm1";
+import { state } from "./state.js?v=20260627-calm2";
+import { fetchJson, logsApiPath, fetchQueue } from "./api.js?v=20260627-calm2";
+import { applyPublicConfig, renderWorkspaceChrome, toast } from "./utils/dom.js?v=20260627-calm2";
+import { renderSummary } from "./views/overview.js?v=20260627-calm2";
+import { renderSystem } from "./views/system.js?v=20260627-calm2";
+import { renderAstrBot } from "./views/astrbot.js?v=20260627-calm2";
+import { renderLogs } from "./views/logs.js?v=20260627-calm2";
+import { bindUI, promptNotificationPermission, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode, addLoadingState, removeLoadingState } from "./ui.js?v=20260627-calm2";
+import { initEventListActions } from "./components/event-list.js?v=20260627-calm2";
+import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260627-calm2";
+import { transitionViews } from "./utils/motion.js?v=20260627-calm2";
 
 function logTailLimit() {
   return Math.max(20, Number(state.config?.astrbot?.tail_lines || 300));

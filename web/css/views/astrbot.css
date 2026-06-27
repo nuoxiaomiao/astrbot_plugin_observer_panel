@@ -1391,6 +1391,67 @@
   background: rgba(227, 179, 65, 0.55);
 }
 
+/* ─────────────────────────────────────────────
+   极简模式:只保留文字过渡 + live↔complete 切换。
+   关闭全部常驻无限动画(流光/心跳/进度条/打字点)
+   以及内容变化时的卡片缩放与 meta 闪烁。
+   保留的不在此处:
+     - 文字丝滑切换 .is-switching(见上方 1070 区)
+     - live→complete 切换 .is-leaving/.is-entering(见 474 区)
+   ───────────────────────────────────────────── */
+
+/* 列表卡顶部流光条 → 静态色条 */
+.session-card.is-live::after {
+  animation: none;
+  background: var(--shimmer-color, rgba(113, 183, 255, 1));
+  opacity: 0.9;
+}
+
+/* 详情卡顶部流光条 → 静态(用 ::before 的纯色条即可,流光层关掉) */
+.session-live-card::after {
+  animation: none;
+  display: none;
+}
+
+/* 状态心跳点 → 静态圆点 */
+.session-live-badge::before {
+  animation: none;
+  box-shadow: none;
+}
+
+/* 底部进度条 → 隐藏(进行中已由静态色条 + badge 文案表达) */
+.session-live-card .session-live-progress,
+.session-flow-step.running .session-flow-main::before,
+.session-flow-step.running .session-flow-main::after {
+  display: none;
+}
+
+/* 流程节点脉冲 → 静态 */
+.session-flow-step.running .session-flow-dot {
+  animation: none;
+}
+
+/* 打字三点 → 隐藏 */
+.session-typing {
+  display: none;
+}
+
+/* 计时器脉冲 → 静态 */
+.session-card-duration.is-live-timer {
+  animation: none;
+}
+
+/* 内容变化时的卡片缩放 bump → 取消(只保留文字本身的过渡) */
+.session-live-card.is-content-bump {
+  animation: none;
+}
+
+/* meta 行刷新闪烁 → 取消 */
+.session-live-meta.is-meta-tick small:first-child,
+.session-live-card.is-generating .session-live-meta.is-meta-tick small:first-child {
+  animation: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .session-live-card,
   .session-detail.session-detail-live,
