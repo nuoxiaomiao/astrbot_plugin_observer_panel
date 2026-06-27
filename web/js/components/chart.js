@@ -2,8 +2,8 @@
 // 组件 - 条形图
 // ============================================================================
 
-import { renderSignature, emptyBlock } from "../utils/dom.js?v=20260625-live3";
-import { animateFillWidth } from "../utils/motion.js?v=20260625-live3";
+import { renderSignature, emptyBlock } from "../utils/dom.js?v=20260627-calm1";
+import { animateFillWidth } from "../utils/motion.js?v=20260627-calm1";
 
 function chartSignature(items) {
   return [

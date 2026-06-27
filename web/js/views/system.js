@@ -2,10 +2,10 @@
 // 视图 - 系统
 // ============================================================================
 
-import { state } from "../state.js?v=20260625-live3";
-import { INTERFACE_STATE_LABELS } from "../config.js?v=20260625-live3";
-import { formatBytes, formatPercent, formatNumber, shortUptime, usageKind } from "../utils/format.js?v=20260625-live3";
-import { $, setText, renderKv, detailRow, emptyBlock, renderWorkspaceChrome } from "../utils/dom.js?v=20260625-live3";
+import { state } from "../state.js?v=20260627-calm1";
+import { INTERFACE_STATE_LABELS } from "../config.js?v=20260627-calm1";
+import { formatBytes, formatPercent, formatNumber, shortUptime, usageKind } from "../utils/format.js?v=20260627-calm1";
+import { $, setText, renderKv, detailRow, emptyBlock, renderWorkspaceChrome } from "../utils/dom.js?v=20260627-calm1";
 
 /**
  * 渲染堆栈项目（用于磁盘、网络等）

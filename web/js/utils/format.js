@@ -2,7 +2,7 @@
 // 工具函数 - 格式化
 // ============================================================================
 
-import { DIAGNOSTIC_LEVELS } from "../config.js?v=20260625-live3";
+import { DIAGNOSTIC_LEVELS } from "../config.js?v=20260627-calm1";
 
 /**
  * 格式化字节大小
