@@ -1400,11 +1400,9 @@
      - live→complete 切换 .is-leaving/.is-entering(见 474 区)
    ───────────────────────────────────────────── */
 
-/* 列表卡顶部流光条 → 静态色条 */
+/* 列表卡顶部流光条 → 完全移除 */
 .session-card.is-live::after {
-  animation: none;
-  background: var(--shimmer-color, rgba(113, 183, 255, 1));
-  opacity: 0.9;
+  display: none;
 }
 
 /* 详情卡顶部流光条 → 静态(用 ::before 的纯色条即可,流光层关掉) */
@@ -1413,10 +1411,9 @@
   display: none;
 }
 
-/* 状态心跳点 → 静态圆点 */
+/* 状态心跳点 → 完全移除 */
 .session-live-badge::before {
-  animation: none;
-  box-shadow: none;
+  display: none;
 }
 
 /* 底部进度条 → 隐藏(进行中已由静态色条 + badge 文案表达) */
@@ -1450,6 +1447,27 @@
 .session-live-meta.is-meta-tick small:first-child,
 .session-live-card.is-generating .session-live-meta.is-meta-tick small:first-child {
   animation: none;
+}
+
+/* #2 减少重复"生成中":概览卡头部状态徽章与实时卡 aside 徽章重复,
+   live 时隐藏概览卡的状态徽章(列表卡 + 实时卡各保留一个) */
+.session-overview-card.is-live .session-status-cluster {
+  display: none;
+}
+
+/* #3 移除 "LIVE" 标识 */
+.session-live-phase::after,
+.session-live-card.is-generating .session-live-phase::after {
+  content: none;
+  display: none;
+}
+
+/* #4 "开始请求模型"标题不需要底色:实时卡彩色背景 → 中性表面 */
+.session-live-card,
+.session-live-card.is-generating,
+.session-live-card:not(.is-generating) {
+  --card-bg: var(--surface-2);
+  background: var(--surface-2);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -2,7 +2,7 @@
 // 工具函数 - DOM 操作 / UI 辅助
 // ============================================================================
 
-import { state } from "../state.js?v=20260627-calm2";
+import { state } from "../state.js?v=20260627-calm3";
 import {
   DEFAULT_RUNNING_TIMEOUT_MS,
   DEFAULT_SLOW_SESSION_MS,
@@ -10,8 +10,8 @@ import {
   DEFAULT_IMPORTANT_EVENT_LIMIT,
   DEFAULT_LOG_PAGE_SIZE,
   DEFAULT_RAW_CLIP_LENGTH,
-} from "../config.js?v=20260627-calm2";
-import { formatCompactLogTime, clampNumber, boolValue } from "./format.js?v=20260627-calm2";
+} from "../config.js?v=20260627-calm3";
+import { formatCompactLogTime, clampNumber, boolValue } from "./format.js?v=20260627-calm3";
 
 export function $(id) {
   return document.getElementById(id);
