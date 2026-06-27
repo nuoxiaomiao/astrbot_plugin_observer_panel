@@ -2,7 +2,8 @@
 // 组件 - 仪表盘
 // ============================================================================
 
-import { formatPercent, usageKind } from "../utils/format.js?v=20260621-flow3";
+import { formatPercent, usageKind } from "../utils/format.js?v=20260625-live3";
+import { animateFillWidth } from "../utils/motion.js?v=20260625-live3";
 
 /**
  * 渲染资源使用率仪表盘
@@ -26,7 +27,7 @@ export function renderGauge(parent, label, value, meta, kind = usageKind(value))
   track.className = "usage-track";
   const fill = document.createElement("div");
   fill.className = "usage-fill";
-  fill.style.width = `${Math.max(0, Math.min(100, Number(value || 0)))}%`;
+  animateFillWidth(fill, Number(value || 0), { fromZero: true });
   track.appendChild(fill);
   const foot = document.createElement("small");
   foot.textContent = meta || "--";

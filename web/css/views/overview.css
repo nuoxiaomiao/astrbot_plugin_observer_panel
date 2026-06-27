@@ -231,3 +231,19 @@
   margin: 0;
 }
 
+
+
+.function-card.animate-in,
+.resource-card.animate-in {
+  animation: fadeInUp var(--motion-enter-duration) var(--ease-out) both;
+}
+
+.function-card strong {
+  display: inline-block;
+  transition: transform var(--duration-normal) var(--ease-out), color var(--duration-normal) var(--ease-out);
+}
+
+.function-card:hover strong {
+  transform: scale(1.05);
+  color: var(--info-bright);
+}

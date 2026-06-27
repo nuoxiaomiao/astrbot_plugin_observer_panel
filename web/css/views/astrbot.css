@@ -13,10 +13,10 @@
 
 .session-visual-layout {
   display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
-  gap: 18px;
-  padding: 16px;
-  min-height: 540px;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 14px;
+  padding: 12px;
+  min-height: 480px;
   align-items: start;
 }
 
@@ -28,7 +28,7 @@
 .session-list {
   display: grid;
   align-content: start;
-  gap: 10px;
+  gap: 8px;
   max-height: 76vh;
   overflow: auto;
   padding-right: 4px;
@@ -46,9 +46,9 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface-2);
-  padding: 12px;
+  padding: 10px;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   text-align: left;
   cursor: pointer;
   transition:
@@ -65,14 +65,15 @@
 .session-card.is-live::before {
   content: "";
   position: absolute;
-  top: 10px;
-  bottom: 10px;
+  top: 8px;
+  bottom: 8px;
   left: 0;
-  width: 3px;
+  width: 4px;
   border-radius: 0 3px 3px 0;
   background: var(--muted-dark);
   opacity: 0.35;
   transition: opacity 0.25s ease, background 0.25s ease;
+  animation: sessionRailPulse 2.4s ease-in-out infinite;
 }
 
 /* 进行中 — 冷静蓝 */
@@ -82,7 +83,9 @@
 
 .session-card.is-live.is-running::before {
   background: #71b7ff;
-  opacity: 0.9;
+  opacity: 0.95;
+  --rail-glow: rgba(113, 183, 255, 0.45);
+  animation-duration: 2.6s;
 }
 
 /* 生成中 — 活跃琥珀 */
@@ -92,7 +95,9 @@
 
 .session-card.is-live.is-generating::before {
   background: #e3b341;
-  opacity: 0.9;
+  opacity: 1;
+  --rail-glow: rgba(227, 179, 65, 0.55);
+  animation-duration: 1.35s;
 }
 
 /* -------- 状态呼吸动画 -------- */
@@ -111,21 +116,40 @@
   }
 }
 
-.session-card.is-live.is-running,
+@keyframes sessionRailPulse {
+  0%, 100% {
+    opacity: 0.85;
+    box-shadow: 0 0 0 0 var(--rail-glow, rgba(113, 183, 255, 0.4));
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 10px 2px var(--rail-glow, rgba(113, 183, 255, 0.35));
+  }
+}
+
+@keyframes sessionListPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.08); }
+}
+
+.session-card.is-live {
+  animation: sessionListPulse 2.2s ease-in-out infinite, softBreathe var(--breathe-speed, 2.8s) ease-in-out infinite;
+}
+
 .session-card.is-live.is-generating {
-  animation: softBreathe var(--breathe-speed, 2.8s) ease-in-out infinite;
+  animation: sessionListPulse 1.35s ease-in-out infinite, softBreathe var(--breathe-speed, 2.2s) ease-in-out infinite;
 }
 
 /* running: 更慢、更柔和 */
 .session-card.is-live.is-running {
-  --glow-outer: rgba(113, 183, 255, 0.08);
+  --glow-outer: rgba(113, 183, 255, 0.12);
   --glow-inner: rgba(113, 183, 255, 0.04);
   --breathe-speed: 3.2s;
 }
 
 /* generating: 更快、更明显 */
 .session-card.is-live.is-generating {
-  --glow-outer: rgba(227, 179, 65, 0.12);
+  --glow-outer: rgba(227, 179, 65, 0.18);
   --glow-inner: rgba(227, 179, 65, 0.06);
   --breathe-speed: 2.2s;
 }
@@ -148,10 +172,70 @@
   animation: sessionCardSlideIn 0.32s var(--ease-out) both;
 }
 
+@keyframes sessionSelectedRing {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(113, 183, 255, 0.45), 0 0 28px rgba(113, 183, 255, 0.22); }
+  50% { box-shadow: 0 0 0 3px rgba(113, 183, 255, 0.65), 0 0 36px rgba(113, 183, 255, 0.32); }
+}
+
+@keyframes sessionSelectedRingAmber {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(227, 179, 65, 0.5), 0 0 32px rgba(227, 179, 65, 0.24); }
+  50% { box-shadow: 0 0 0 3px rgba(227, 179, 65, 0.72), 0 0 42px rgba(227, 179, 65, 0.34); }
+}
+
+.session-card.is-selected-live {
+  animation: sessionSelectedRing 2s ease-in-out infinite, sessionListPulse 2.2s ease-in-out infinite, softBreathe var(--breathe-speed, 2.8s) ease-in-out infinite;
+}
+
+.session-card.is-selected-live.is-generating {
+  animation: sessionSelectedRingAmber 1.35s ease-in-out infinite, sessionListPulse 1.35s ease-in-out infinite, softBreathe var(--breathe-speed, 2.2s) ease-in-out infinite;
+}
+
 .session-card.selected {
   border-color: var(--info-bright);
   background: rgba(76, 154, 255, 0.08);
   box-shadow: 0 0 0 2px rgba(113, 183, 255, 0.18);
+}
+
+/* -------- 顶部流光进度条 -------- */
+/* live 会话卡片顶部的流光条，传达"仍在处理" */
+
+.session-card.is-live::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--shimmer-color, rgba(113, 183, 255, 1)) 45%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  pointer-events: none;
+  opacity: 1;
+  overflow: hidden;
+  box-shadow: 0 0 14px var(--shimmer-glow, rgba(113, 183, 255, 0.45));
+  animation: sessionShimmer var(--shimmer-speed, var(--live-shimmer-running, 1.2s)) linear infinite;
+}
+
+.session-card.is-live.is-running {
+  --shimmer-color: rgba(113, 183, 255, 1);
+  --shimmer-speed: var(--live-shimmer-running, 1.2s);
+  --shimmer-glow: var(--live-glow-running, rgba(113, 183, 255, 0.55));
+}
+
+.session-card.is-live.is-generating {
+  --shimmer-color: rgba(255, 220, 120, 1);
+  --shimmer-speed: var(--live-shimmer-generating, 0.75s);
+  --shimmer-glow: var(--live-glow-generating, rgba(227, 179, 65, 0.75));
+  transform-origin: center;
+}
+
+.session-card.is-live:hover::after {
+  animation-play-state: paused;
 }
 
 /* -------- 卡片内部布局 -------- */
@@ -184,6 +268,11 @@
   justify-content: flex-start;
 }
 
+@keyframes sessionMessageSheen {
+  0% { background-position: -120% 0; }
+  100% { background-position: 220% 0; }
+}
+
 .session-card-message {
   margin: 0;
   color: var(--text);
@@ -193,6 +282,35 @@
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+@keyframes liveTimerPulse {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; color: var(--info-bright); }
+}
+
+.session-card.is-generating .session-card-duration.is-live-timer {
+  animation: liveTimerPulse 1.2s ease-in-out infinite;
+  color: var(--warn-bright);
+}
+
+.session-card.is-running .session-card-duration.is-live-timer {
+  animation: liveTimerPulse 1.8s ease-in-out infinite;
+}
+
+.session-card.is-generating .session-card-message {
+  position: relative;
+}
+
+.session-card.is-generating .session-card-message::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(227, 179, 65, 0.08) 50%, transparent 65%);
+  background-size: 200% 100%;
+  animation: sessionMessageSheen 2.2s ease-in-out infinite;
+  border-radius: 4px;
 }
 
 .session-card-footer {
@@ -222,13 +340,60 @@
   background: rgba(227, 179, 65, 0.08);
 }
 
-.session-live-text,
-.session-live-copy {
+/* live badge 心跳脉冲 — 在 badge 内部叠加一个圆点 */
+.session-live-badge::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: var(--pulse-color, var(--info-bright));
+  box-shadow: 0 0 0 0 var(--pulse-ring, rgba(113, 183, 255, 0.55));
+  animation: sessionHeartbeat 1.1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.session-live-badge.is-running,
+.session-live-badge:not(.is-generating) {
+  --pulse-color: var(--info-bright);
+  --pulse-ring: rgba(113, 183, 255, 0.55);
+}
+
+.session-live-badge.is-generating {
+  --pulse-color: var(--warn-bright);
+  --pulse-ring: rgba(227, 179, 65, 0.55);
+}
+
+.session-live-badge.is-generating::before {
+  animation-duration: 0.75s;
+}
+
+/* 覆盖 .session-live-text 为空时 badge 仍保留心跳点 */
+.session-live-badge .session-live-text {
+  margin-left: 0;
+}
+
+.session-live-badge .session-live-text {
   background-size: 220% auto;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: sessionTextStream 1.85s linear infinite;
+  animation: sessionTextStream 1.2s linear infinite;
+  font-weight: 600;
+}
+
+.session-live-copy,
+.session-live-body.session-live-copy {
+  color: var(--text-bright);
+  text-shadow: 0 0 18px rgba(113, 183, 255, 0.12);
+  animation: textPulse 1.8s ease-in-out infinite, sessionTextGlow 2.4s ease-in-out infinite;
+}
+
+.session-live-copy.is-generating,
+.session-live-body.session-live-copy.is-generating {
+  text-shadow: 0 0 20px rgba(227, 179, 65, 0.18);
+  animation-duration: 1.1s, 1.6s;
 }
 
 .session-live-text.is-running,
@@ -239,6 +404,59 @@
 .session-live-text.is-generating,
 .session-live-copy.is-generating {
   background-image: linear-gradient(90deg, rgba(227, 179, 65, 0.42) 0%, #fff6d6 40%, rgba(227, 179, 65, 0.42) 100%);
+}
+
+/* -------- 打字指示器 -------- */
+/* live 会话页脚的三圆点跳动，传达"正在生成回复" */
+
+.session-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.session-card-footer .session-typing {
+  margin-left: auto;
+  align-self: center;
+}
+
+.session-live-body .session-typing {
+  display: flex;
+  margin-top: 6px;
+}
+
+.session-live-body .session-typing-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.session-typing-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--typing-color, var(--info-bright));
+  opacity: 0.45;
+  animation: sessionTypingBounce 1.2s ease-in-out infinite;
+}
+
+.session-typing-dot:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.session-typing-dot:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+.session-card.is-live.is-running .session-typing,
+.session-live-card:not(.is-generating) .session-typing {
+  --typing-color: var(--info-bright);
+}
+
+.session-card.is-live.is-generating .session-typing,
+.session-live-card.is-generating .session-typing {
+  --typing-color: var(--warn-bright);
 }
 
 /* ─── Overview & Journey ─── */
@@ -252,6 +470,25 @@
   gap: 14px;
 }
 
+/* live→complete 切换：live 卡片淡出 / flow 区域淡入 */
+.session-live-wrap,
+.session-flow-wrap {
+  transition:
+    opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.session-live-wrap.is-leaving {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.98);
+  pointer-events: none;
+}
+
+.session-flow-wrap.is-entering {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
 .session-overview-card,
 .session-flow-wrap {
   border: 1px solid var(--line);
@@ -261,13 +498,38 @@
 }
 
 .session-overview-card {
-  padding: 16px;
+  padding: 14px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
+}
+
+.session-overview-card {
+  position: relative;
+  overflow: hidden;
 }
 
 .session-overview-card.is-live {
   border-color: rgba(113, 183, 255, 0.3);
+}
+
+.session-overview-card.is-live::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, rgba(113, 183, 255, 0.95) 45%, transparent);
+  background-size: 200% 100%;
+  animation: sessionShimmer var(--live-shimmer-running, 1.2s) linear infinite;
+  box-shadow: 0 0 12px rgba(113, 183, 255, 0.4);
+  pointer-events: none;
+}
+
+.session-overview-card.is-live.is-generating::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 220, 120, 1) 45%, transparent);
+  animation-duration: var(--live-shimmer-generating, 0.75s);
+  box-shadow: 0 0 14px rgba(227, 179, 65, 0.5);
 }
 
 .session-overview-card.is-live.is-generating {
@@ -277,60 +539,60 @@
 .session-overview-head {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
 }
 
 .session-overview-head h3 {
   margin: 0;
   color: var(--text-bright);
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .session-overview-head p {
-  margin: 6px 0 0;
+  margin: 5px 0 0;
   color: var(--muted-dark);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .session-overview-meta {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .session-overview-chip {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.025);
-  padding: 10px 12px;
+  padding: 8px 10px;
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .session-overview-chip span {
   color: var(--muted-dark);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .session-overview-chip strong {
   color: var(--text-bright);
-  font-size: 13px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 
 /* ─── Flow ─── */
 
 .session-flow-wrap {
-  padding: 16px;
+  padding: 14px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .session-flow-wrap > h3 {
   margin: 0;
   color: var(--text-bright);
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .session-flow {
@@ -341,8 +603,8 @@
 .session-flow-step {
   --flow-line: rgba(255, 255, 255, 0.08);
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
   opacity: 1;
   transform: translateY(0);
 }
@@ -353,7 +615,7 @@
 
 .session-flow-step.is-new {
   opacity: 0;
-  transform: translateY(14px) scale(0.985);
+  transform: translateY(20px) scale(0.98);
   animation: sessionStepSlideIn 0.42s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
   animation-delay: var(--step-delay, 0s);
 }
@@ -423,10 +685,10 @@
 
 .session-flow-main {
   border-radius: var(--radius-lg);
-  padding: 14px 14px 16px;
+  padding: 12px;
   background: rgba(255, 255, 255, 0.022);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .session-flow-step.running .session-flow-main {
@@ -448,35 +710,35 @@
 .session-flow-head {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
 }
 
 .session-flow-title {
   color: var(--text-bright);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
 .session-flow-body {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   color: var(--text);
-  font-size: 13px;
-  line-height: 1.75;
+  font-size: 12px;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .session-flow-meta {
-  margin-top: 10px;
+  margin-top: 8px;
   display: flex;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .session-flow-meta small {
   color: var(--muted-dark);
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.5;
 }
 
@@ -493,15 +755,15 @@
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.015) 100%);
   box-shadow: var(--shadow-subtle);
-  padding: 16px;
+  padding: 14px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .session-live-wrap > h3 {
   margin: 0;
   color: var(--text-bright);
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .session-live-card {
@@ -509,9 +771,9 @@
   border: 1px solid var(--card-border, rgba(113, 183, 255, 0.22));
   border-radius: var(--radius-lg);
   background: var(--card-bg, rgba(113, 183, 255, 0.04));
-  padding: 18px;
+  padding: 14px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   overflow: hidden;
   transition: border-color var(--duration) var(--ease-out),
               background var(--duration) var(--ease-out);
@@ -536,20 +798,179 @@
   --card-breathe: 2.4s;
 }
 
-/* 顶部色条 */
+/* 顶部静态色条 + 流光扫描（避免与底部进度条共用 ::after） */
+.session-live-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--bar-color, #71b7ff);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  opacity: 0.95;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .session-live-card::after {
   content: "";
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 3px;
-  background: var(--bar-color, #71b7ff);
+  height: 4px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--shimmer-bar, rgba(255, 255, 255, 0.85)) 45%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  pointer-events: none;
+  z-index: 3;
+  animation: sessionShimmer var(--shimmer-speed, 1.6s) linear infinite;
+  box-shadow: 0 0 14px var(--shimmer-glow, rgba(113, 183, 255, 0.45));
 }
 
-.session-live-card.is-generating::after {
+.session-live-card:not(.is-generating) {
+  --bar-color: #71b7ff;
+  --shimmer-bar: rgba(220, 240, 255, 0.95);
+  --shimmer-speed: var(--live-shimmer-running, 1.2s);
+  --shimmer-glow: var(--live-glow-running, rgba(113, 183, 255, 0.55));
+}
+
+.session-live-card.is-generating {
   --bar-color: #e3b341;
+  --shimmer-bar: rgba(255, 245, 200, 1);
+  --shimmer-speed: var(--live-shimmer-generating, 0.75s);
+  --shimmer-glow: var(--live-glow-generating, rgba(227, 179, 65, 0.75));
+}
+
+/* 实时详情区外发光 */
+.session-detail.session-detail-live {
+  position: relative;
+  border-radius: var(--radius-lg);
+  animation: sessionDetailAura 2.4s ease-in-out infinite;
+}
+
+.session-detail.session-detail-live.is-generating,
+.session-detail.session-detail-live:has(.session-live-card.is-generating) {
+  animation-name: sessionDetailAuraAmber;
+  animation-duration: 1.2s;
+}
+
+.session-live-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+.session-live-wrap::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(125deg, transparent 30%, rgba(113, 183, 255, 0.18) 48%, transparent 62%);
+  background-size: 220% 220%;
+  animation: liveWrapSweep 2.8s ease-in-out infinite;
+  z-index: 0;
+}
+
+.session-live-wrap:has(.session-live-card.is-generating)::before {
+  background: linear-gradient(125deg, transparent 28%, rgba(227, 179, 65, 0.26) 46%, transparent 60%);
+  animation-duration: 1.6s;
+}
+
+.session-live-wrap > * {
+  position: relative;
+  z-index: 1;
+}
+
+.session-live-card {
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px var(--card-border, rgba(113, 183, 255, 0.35)),
+    0 8px 28px rgba(76, 154, 255, 0.12);
+}
+
+.session-live-card.is-generating {
+  box-shadow:
+    0 0 0 1px rgba(227, 179, 65, 0.42),
+    0 10px 32px rgba(227, 179, 65, 0.16);
+}
+
+@keyframes liveScanSweep {
+  0% { transform: translateY(-120%) skewY(-8deg); opacity: 0; }
+  15% { opacity: 0.35; }
+  50% { opacity: 0.2; }
+  100% { transform: translateY(220%) skewY(-8deg); opacity: 0; }
+}
+
+.session-live-scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.session-live-scan::before {
+  content: "";
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  height: 45%;
+  background: linear-gradient(180deg, transparent, rgba(113, 183, 255, 0.12), transparent);
+  animation: liveScanSweep 2.5s ease-in-out infinite;
+}
+
+.session-live-card.is-generating .session-live-scan::before {
+  background: linear-gradient(180deg, transparent, rgba(227, 179, 65, 0.16), transparent);
+  animation-duration: 1.6s;
+}
+
+/* 添加径向波纹动画背景层 */
+@keyframes rippleExpand {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.85);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+
+.session-live-title::after,
+.session-flow-title.session-live-copy::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  margin-left: -16px;
+  border-radius: 999px;
+  background: var(--ripple-color, var(--info-bright));
+  animation: rippleExpand 2s ease-out infinite;
+  pointer-events: none;
+}
+
+.session-live-title {
+  position: relative;
+}
+
+.session-flow-title.session-live-copy {
+  position: relative;
+}
+
+.session-live-title.is-generating::after,
+.session-flow-title.session-live-copy.is-generating::after {
+  --ripple-color: var(--warn-bright);
+  animation-duration: 1.4s;
 }
 
 /* 统一使用 softBreathe 定义在上方 */
@@ -559,25 +980,48 @@
 .session-live-head {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
 }
 
 .session-live-title-wrap {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .session-live-phase {
   color: var(--muted-dark);
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-live-phase::after {
+  content: "LIVE";
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--info-bright);
+  border: 1px solid rgba(113, 183, 255, 0.45);
+  background: rgba(113, 183, 255, 0.12);
+  animation: sessionHeartbeat 1.2s ease-in-out infinite;
+}
+
+.session-live-card.is-generating .session-live-phase::after {
+  color: var(--warn-bright);
+  border-color: rgba(227, 179, 65, 0.55);
+  background: rgba(227, 179, 65, 0.14);
+  animation-duration: 0.8s;
 }
 
 .session-live-title {
   color: var(--text-bright);
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.4;
 }
 
@@ -588,44 +1032,71 @@
 .session-live-body {
   margin: 0;
   color: var(--text);
-  font-size: 13px;
-  line-height: 1.75;
+  font-size: 12px;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
-  min-height: 1.75em;
+  min-height: 1.6em;
 }
 
 .session-live-meta {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
+}
+
+@keyframes metaTickFlash {
+  0% { background: rgba(113, 183, 255, 0.22); }
+  100% { background: transparent; }
+}
+
+.session-live-meta.is-meta-tick small:first-child {
+  border-radius: 4px;
+  padding: 2px 4px;
+  animation: metaTickFlash 0.35s ease-out;
+}
+
+.session-live-card.is-generating .session-live-meta.is-meta-tick small:first-child {
+  animation-name: metaTickFlash;
+  filter: brightness(1.15);
 }
 
 .session-live-meta small {
   color: var(--muted-dark);
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.5;
 }
 
-.session-live-card.is-refreshing .session-live-title,
-.session-live-card.is-refreshing .session-live-body {
-  animation: sessionLivePulse 0.5s var(--ease-out);
+/* 实时状态文字丝滑切换：淡出+模糊 → 替换 → 淡入+清晰 */
+.session-live-title,
+.session-live-body {
+  transition:
+    opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    filter 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.session-live-title.is-switching,
+.session-live-body.is-switching {
+  opacity: 0;
+  filter: blur(6px);
+  transform: translateY(8px);
+  transition:
+    opacity 0.2s cubic-bezier(0.4, 0, 1, 1),
+    filter 0.2s cubic-bezier(0.4, 0, 1, 1),
+    transform 0.2s cubic-bezier(0.4, 0, 1, 1);
 }
 
 /* ═════════════════════════════════════════════
    Keyframes
    ═════════════════════════════════════════════ */
 
-@keyframes sessionLivePulse {
-  0% {
-    opacity: 0.35;
-    transform: translateY(3px);
-    filter: blur(1px);
+@keyframes fadeInShimmer {
+  from {
+    opacity: 0;
   }
-  100% {
+  to {
     opacity: 1;
-    transform: translateY(0);
-    filter: blur(0);
   }
 }
 
@@ -643,7 +1114,7 @@
 @keyframes sessionStepSlideIn {
   from {
     opacity: 0;
-    transform: translateY(14px) scale(0.985);
+    transform: translateY(20px) scale(0.98);
   }
   to {
     opacity: 1;
@@ -667,8 +1138,8 @@
     transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(113, 183, 255, 0.03);
-    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(113, 183, 255, 0.06);
+    transform: scale(1.12);
   }
 }
 
@@ -679,8 +1150,278 @@
     transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(227, 179, 65, 0.03);
-    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(227, 179, 65, 0.06);
+    transform: scale(1.12);
+  }
+}
+
+/* 顶部流光进度条 — 从左到右扫描 */
+@keyframes sessionShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+/* 打字指示器 — 三圆点依次跳动 */
+@keyframes sessionTypingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-6px) scale(1.15);
+    opacity: 1;
+  }
+}
+
+/* live badge 心跳脉冲 — 圆点缩放 + 环扩散 */
+@keyframes sessionHeartbeat {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 var(--pulse-ring, rgba(113, 183, 255, 0.55));
+  }
+  50% {
+    transform: scale(1.25);
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+
+/* 进度条动画 - 用于工具调用和模型生成 */
+@keyframes progressIndeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+.session-flow-step.running .session-flow-main {
+  position: relative;
+  overflow: hidden;
+}
+
+.session-flow-step.running .session-flow-main::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--progress-bg, rgba(255, 255, 255, 0.08));
+  overflow: hidden;
+  z-index: 0;
+}
+
+.session-live-card .session-live-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  z-index: 2;
+}
+
+.session-live-card .session-live-progress::before {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 38%;
+  height: 100%;
+  background: var(--progress-bar, var(--info-bright));
+  animation: progressIndeterminate var(--live-progress-running, 1.1s) cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
+  box-shadow: 0 0 16px 4px var(--progress-bar, var(--info-bright));
+}
+
+.session-live-card.is-generating .session-live-progress::before {
+  --progress-bar: var(--warn-bright);
+  animation-duration: var(--live-progress-generating, 0.7s);
+}
+
+.session-flow-step.running .session-flow-main::before {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 25%;
+  height: 2px;
+  background: var(--progress-bar, var(--info-bright));
+  animation: progressIndeterminate 1.8s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
+  z-index: 1;
+}
+
+.session-flow-step.running.is-generating .session-flow-main::before {
+  --progress-bar: var(--warn-bright);
+  animation-duration: 1.3s;
+}
+
+/* 流程步骤 live 文案（与实时卡正文光晕一致，不覆盖 badge/正文规则） */
+.session-flow-title.session-live-copy,
+.session-flow-body.session-live-copy {
+  color: var(--text-bright);
+  text-shadow: 0 0 18px rgba(113, 183, 255, 0.12);
+  animation: textPulse 2.2s ease-in-out infinite, sessionTextGlow 2.4s ease-in-out infinite;
+}
+
+.session-flow-title.session-live-copy.is-generating,
+.session-flow-body.session-live-copy.is-generating {
+  text-shadow: 0 0 20px rgba(227, 179, 65, 0.18);
+  animation-duration: 1.1s, 1.6s;
+}
+
+@keyframes sessionDetailAura {
+  0%, 100% { box-shadow: inset 0 0 0 1px rgba(113, 183, 255, 0.16), 0 0 0 rgba(113, 183, 255, 0); }
+  50% { box-shadow: inset 0 0 0 1px rgba(113, 183, 255, 0.45), 0 0 40px rgba(113, 183, 255, 0.22); }
+}
+
+@keyframes sessionDetailAuraAmber {
+  0%, 100% { box-shadow: inset 0 0 0 1px rgba(227, 179, 65, 0.2), 0 0 0 rgba(227, 179, 65, 0); }
+  50% { box-shadow: inset 0 0 0 1px rgba(227, 179, 65, 0.55), 0 0 48px rgba(227, 179, 65, 0.28); }
+}
+
+@keyframes liveWrapSweep {
+  0% { opacity: 0.35; background-position: 0% 0%; }
+  50% { opacity: 1; background-position: 100% 100%; }
+  100% { opacity: 0.35; background-position: 0% 0%; }
+}
+
+@keyframes sessionTextGlow {
+  0%, 100% { opacity: 0.92; }
+  50% { opacity: 1; }
+}
+
+@keyframes liveBorderFlash {
+  0%, 100% { border-color: var(--card-border, rgba(113, 183, 255, 0.22)); }
+  40% { border-color: var(--info-bright); }
+}
+
+@keyframes sessionLiveBump {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+.session-live-card.is-content-bump {
+  animation: sessionLiveBump 0.45s var(--ease-out), liveBorderFlash 0.45s var(--ease-out), softBreathe var(--card-breathe, 3.2s) ease-in-out infinite;
+}
+
+/* ═════════════════════════════════════════════
+   实时动画 — 克制模式
+   设计原则:每张 live 卡只保留"有语义"的动效信号,
+   去掉纯装饰的呼吸/外发光/扫描/波纹/文字流光。
+   保留:顶部流光条、状态心跳点、底部进度条、打字三点。
+   删除:卡片呼吸、列表亮度脉冲、详情外发光、整框斜扫、
+        扫描线、标题波纹、badge 文字流光、正文呼吸。
+   如需恢复华丽版,删除本块即可。
+   ═════════════════════════════════════════════ */
+
+/* 1. 列表卡:去掉亮度脉冲 + 卡片呼吸,只留左色条 + 顶部流光 */
+.session-card.is-live,
+.session-card.is-live.is-generating,
+.session-card.is-selected-live,
+.session-card.is-selected-live.is-generating {
+  animation: none;
+}
+/* 选中态改为静态描边环(原本是呼吸环) */
+.session-card.is-selected-live {
+  box-shadow: 0 0 0 2px rgba(113, 183, 255, 0.5), 0 0 20px rgba(113, 183, 255, 0.18);
+}
+.session-card.is-selected-live.is-generating {
+  box-shadow: 0 0 0 2px rgba(227, 179, 65, 0.55), 0 0 22px rgba(227, 179, 65, 0.2);
+}
+/* 左色条:保留静态高亮,去掉脉冲发光 */
+.session-card.is-live::before {
+  animation: none;
+}
+/* 消息扫光:纯装饰,删 */
+.session-card.is-generating .session-card-message::after {
+  animation: none;
+  content: none;
+}
+
+/* 2. 详情区:去掉外发光、整框斜扫、扫描线、卡片呼吸 */
+.session-detail.session-detail-live,
+.session-detail.session-detail-live.is-generating,
+.session-detail.session-detail-live:has(.session-live-card.is-generating) {
+  animation: none;
+}
+.session-live-wrap::before {
+  display: none;
+}
+.session-live-scan {
+  display: none;
+}
+.session-live-card {
+  animation: none;
+}
+
+/* 3. 标题波纹 + 正文呼吸/流光:删,回归静态高亮文本 */
+.session-live-title::after,
+.session-flow-title.session-live-copy::after {
+  display: none;
+}
+.session-live-copy,
+.session-live-body.session-live-copy,
+.session-live-copy.is-generating,
+.session-live-body.session-live-copy.is-generating {
+  animation: none;
+}
+
+/* 4. badge 文字流光:删,保留心跳点(状态信号) */
+.session-live-badge .session-live-text {
+  animation: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  color: inherit;
+  background-image: none;
+}
+
+/* 概览卡顶部流光:与详情卡顶部流光重复,这里降为静态条 */
+.session-overview-card.is-live::after {
+  animation: none;
+  background: rgba(113, 183, 255, 0.5);
+}
+.session-overview-card.is-live.is-generating::after {
+  background: rgba(227, 179, 65, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-live-card,
+  .session-detail.session-detail-live,
+  .session-live-wrap::before,
+  .session-live-scan::before,
+  .session-overview-card.is-live::after {
+    animation: none !important;
+  }
+  .session-card.is-live::after,
+  .session-live-card::after {
+    animation: none !important;
+    opacity: 1;
+  }
+  .session-live-card .session-live-progress::before,
+  .session-flow-step.running .session-flow-main::before {
+    animation: none !important;
+    transform: translateX(30%);
+  }
+  /* 补全:此前遗漏的常驻小动画,reduced-motion 下一并静止 */
+  .session-typing-dot,
+  .session-live-badge::before,
+  .session-live-badge .session-live-text,
+  .session-live-copy,
+  .session-live-body.session-live-copy,
+  .session-card-duration.is-live-timer,
+  .session-card.is-generating .session-card-message::after,
+  .session-live-title::after,
+  .session-flow-title.session-live-copy::after,
+  .session-card.is-live::before,
+  .session-flow-step.running .session-flow-dot {
+    animation: none !important;
   }
 }
 

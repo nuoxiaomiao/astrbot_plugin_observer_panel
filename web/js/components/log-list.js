@@ -2,13 +2,14 @@
 // 组件 - 日志流
 // ============================================================================
 
-import { state } from "../state.js?v=20260621-flow3";
-import { LEVELS } from "../config.js?v=20260621-flow3";
-import { formatCompactLogTime } from "../utils/format.js?v=20260621-flow3";
+import { state } from "../state.js?v=20260625-live3";
+import { LEVELS } from "../config.js?v=20260625-live3";
+import { formatCompactLogTime } from "../utils/format.js?v=20260625-live3";
 import {
   $,
   setText,
   emptyBlock,
+  emptyState,
   textSpan,
   smallPill,
   cssEscape,
@@ -19,9 +20,9 @@ import {
   getLogSearchText,
   stableKeyText,
   renderSignature,
-} from "../utils/dom.js?v=20260621-flow3";
-import { compactText } from "../utils/log-text.js?v=20260621-flow3";
-import { buildLogTextMatcher, cachedNormalizeModuleGroup } from "../log/analytics.js?v=20260621-flow3";
+} from "../utils/dom.js?v=20260625-live3";
+import { compactText } from "../utils/log-text.js?v=20260625-live3";
+import { buildLogTextMatcher, cachedNormalizeModuleGroup } from "../log/analytics.js?v=20260625-live3";
 
 let selectTabRef = () => {};
 let syncDetailVisibilityRef = () => {};
@@ -45,7 +46,7 @@ export function renderLogStream(entries) {
     const emptyList = renderSignature("logList", ["empty", state.logLevel, getLogSearchText(), state.logRegex, state.privacyMode]);
     if (!emptyList) return;
     emptyList.innerHTML = "";
-    list.appendChild(emptyBlock("没有匹配的日志行。"));
+    list.appendChild(emptyState("logs"));
     return;
   }
 
@@ -140,9 +141,13 @@ export function renderLogStream(entries) {
   if (state.pendingScrollHighlight) {
     scrollHighlightedLogEntry();
     state.pendingScrollHighlight = false;
-  } else {
-    // 内容增减时按比例恢复，避免顶部跳变
-    list.scrollTop = savedScrollTop;
+  } else if (state.logScrollLocked && savedScrollTop !== null) {
+    // 使用 requestAnimationFrame 确保布局完成后再恢复滚动位置
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        list.scrollTop = savedScrollTop;
+      });
+    });
   }
 }
 
@@ -157,6 +162,14 @@ export function scrollHighlightedLogEntry() {
   const row = document.querySelector(`[data-log-entry-id="${cssEscape(state.highlightLogEntryId)}"]`);
   if (row) {
     row.scrollIntoView({ block: "center", behavior: "smooth" });
+
+    // 2.5 秒后自动移除高亮
+    window.clearTimeout(scrollHighlightedLogEntry._timer);
+    scrollHighlightedLogEntry._timer = window.setTimeout(() => {
+      if (row.classList.contains("highlight")) {
+        row.classList.remove("highlight");
+      }
+    }, 2500);
   }
 }
 

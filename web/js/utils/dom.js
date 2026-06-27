@@ -2,7 +2,7 @@
 // 工具函数 - DOM 操作 / UI 辅助
 // ============================================================================
 
-import { state } from "../state.js?v=20260621-flow3";
+import { state } from "../state.js?v=20260625-live3";
 import {
   DEFAULT_RUNNING_TIMEOUT_MS,
   DEFAULT_SLOW_SESSION_MS,
@@ -10,8 +10,8 @@ import {
   DEFAULT_IMPORTANT_EVENT_LIMIT,
   DEFAULT_LOG_PAGE_SIZE,
   DEFAULT_RAW_CLIP_LENGTH,
-} from "../config.js?v=20260621-flow3";
-import { formatCompactLogTime, clampNumber, boolValue } from "./format.js?v=20260621-flow3";
+} from "../config.js?v=20260625-live3";
+import { formatCompactLogTime, clampNumber, boolValue } from "./format.js?v=20260625-live3";
 
 export function $(id) {
   return document.getElementById(id);
@@ -34,9 +34,31 @@ export function setText(id, value) {
 export function toast(message) {
   const el = $("toast");
   el.textContent = message;
-  el.classList.add("show");
+
+  // 清除之前的定时器
   window.clearTimeout(toast._timer);
-  toast._timer = window.setTimeout(() => el.classList.remove("show"), 3200);
+  window.clearTimeout(toast._showTimer);
+
+  // 先移除旧状态
+  el.classList.remove("visible");
+  el.classList.add("show");
+
+  // 强制触发 reflow，然后添加 visible 类触发动画
+  void el.offsetWidth;
+  toast._showTimer = window.setTimeout(() => {
+    el.classList.add("visible");
+  }, 10);
+
+  // 根据消息长度动态调整显示时长
+  const baseDelay = 2000;
+  const charDelay = message.length > 30 ? (message.length > 60 ? 1500 : 1000) : 0;
+  const duration = baseDelay + charDelay;
+
+  toast._timer = window.setTimeout(() => {
+    el.classList.remove("visible");
+    // 等待淡出动画完成后移除 show 类
+    setTimeout(() => el.classList.remove("show"), 250);
+  }, duration);
 }
 
 export function applyPublicConfig(config) {
@@ -171,6 +193,46 @@ export function emptyBlock(text) {
   empty.className = "empty";
   empty.textContent = text;
   return empty;
+}
+
+/**
+ * 创建增强的空状态元素
+ * @param {string} type - 空状态类型 (logs, events, sessions)
+ * @returns {HTMLElement}
+ */
+export function emptyState(type = "default") {
+  const messages = {
+    logs: {
+      icon: "📭",
+      title: "没有匹配的日志",
+      hint: "尝试调整时间范围、搜索条件或刷新数据"
+    },
+    events: {
+      icon: "✨",
+      title: "没有检测到重要事件",
+      hint: "系统运行正常，或尝试刷新查看最新数据"
+    },
+    sessions: {
+      icon: "💬",
+      title: "暂无会话数据",
+      hint: "等待新的对话会话创建"
+    },
+    default: {
+      icon: "📦",
+      title: "暂无数据",
+      hint: "刷新页面以查看最新内容"
+    }
+  };
+
+  const msg = messages[type] || messages.default;
+  const container = document.createElement("div");
+  container.className = "empty-state";
+  container.innerHTML = `
+    <div class="empty-icon">${msg.icon}</div>
+    <p class="empty-title">${msg.title}</p>
+    <p class="empty-hint">${msg.hint}</p>
+  `;
+  return container;
 }
 
 export function textSpan(text, className) {

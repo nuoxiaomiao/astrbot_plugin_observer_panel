@@ -2,7 +2,8 @@
 // 组件 - 条形图
 // ============================================================================
 
-import { renderSignature, emptyBlock } from "../utils/dom.js?v=20260621-flow3";
+import { renderSignature, emptyBlock } from "../utils/dom.js?v=20260625-live3";
+import { animateFillWidth } from "../utils/motion.js?v=20260625-live3";
 
 function chartSignature(items) {
   return [
@@ -29,7 +30,7 @@ export function renderBarChart(id, items) {
   }
   const max = Math.max(1, ...items.map((item) => Number(item.scaleValue ?? item.value) || 0));
   const fragment = document.createDocumentFragment();
-  items.forEach((item) => {
+  items.forEach((item, index) => {
     const rowEl = document.createElement("div");
     rowEl.className = "bar-row";
     const metricValue = Number(item.scaleValue ?? item.value) || 0;
@@ -46,8 +47,11 @@ export function renderBarChart(id, items) {
     track.className = "bar-track";
     const fill = document.createElement("div");
     fill.className = `bar-fill ${item.className || ""}`;
-    fill.style.width = `${Math.round((metricValue / max) * 100)}%`;
+    fill.classList.add("is-entering");
     track.appendChild(fill);
+    animateFillWidth(fill, Math.round((metricValue / max) * 100), { fromZero: true });
+    window.setTimeout(() => fill.classList.remove("is-entering"), 450);
+    rowEl.style.animationDelay = `${index * 0.04}s`;
     const value = document.createElement("strong");
     value.textContent = displayValue;
     rowEl.append(label, track, value);

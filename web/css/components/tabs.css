@@ -65,12 +65,15 @@
 .view {
   display: none;
   min-height: 0;
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out);
 }
 
 .view.active {
   display: block;
   min-height: 0;
   overflow: auto;
+  opacity: 1;
 }
 
 #logs.view.active {
@@ -128,10 +131,17 @@
 
 .astrbot-subview {
   display: none;
+  min-height: 0;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--motion-view-duration) var(--ease-out),
+              transform var(--motion-view-duration) var(--ease-out);
 }
 
 .astrbot-subview.active {
   display: block;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .astrbot-subview > .panel {

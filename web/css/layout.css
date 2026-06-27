@@ -37,15 +37,20 @@ body.sidebar-collapsed .workspace-sidebar {
 /* 折叠/隐藏时的内容淡出过渡（问题2） */
 .workspace-sidebar,
 .workspace-detail {
-  transition: opacity var(--duration-normal) var(--ease-out);
+  transition: opacity var(--duration-normal) var(--ease-out),
+              visibility 0s linear var(--duration-normal);
 }
 
 body.sidebar-collapsed .workspace-sidebar {
   opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out),
+              visibility 0s linear 0s;
 }
 
 body.detail-hidden .workspace-detail {
   opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out),
+              visibility 0s linear 0s;
 }
 
 /* sidebar 内部子块在折叠时也有渐入效果 */
@@ -142,7 +147,7 @@ body.sidebar-collapsed .sidebar-collapse-btn {
     inset: 0;
     background: rgba(0, 0, 0, 0.6);
     z-index: 999;
-    animation: fadeIn 0.3s;
+    animation: fadeIn var(--motion-view-duration, 0.22s);
   }
 }
 
@@ -178,7 +183,7 @@ body.sidebar-collapsed .sidebar-collapse-btn {
     inset: 0;
     background: rgba(0, 0, 0, 0.6);
     z-index: 998;
-    animation: fadeIn 0.3s;
+    animation: fadeIn var(--motion-view-duration, 0.22s);
   }
 
   .workspace-detail {

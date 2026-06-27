@@ -2,19 +2,20 @@
 // 视图 - 总览
 // ============================================================================
 
-import { state } from "../state.js?v=20260621-flow3";
-import { DIAGNOSTIC_LEVELS, IMPORTANT_EVENT_TYPES } from "../config.js?v=20260621-flow3";
-import { formatPercent, formatCompactLogTime, formatTime, shortUptime, usageKind } from "../utils/format.js?v=20260621-flow3";
+import { state } from "../state.js?v=20260625-live3";
+import { DIAGNOSTIC_LEVELS, IMPORTANT_EVENT_TYPES } from "../config.js?v=20260625-live3";
+import { formatPercent, formatCompactLogTime, formatTime, shortUptime, usageKind } from "../utils/format.js?v=20260625-live3";
 import {
   $,
   setText,
   renderSignature,
   renderKv,
-} from "../utils/dom.js?v=20260621-flow3";
-import { compactText, compactJson } from "../utils/log-text.js?v=20260621-flow3";
-import { renderBarChart } from "../components/chart.js?v=20260621-flow3";
-import { renderEventList } from "../components/event-list.js?v=20260621-flow3";
-import { checkDiagnosticNotifications } from "../ui.js?v=20260621-flow3";
+} from "../utils/dom.js?v=20260625-live3";
+import { compactText, compactJson } from "../utils/log-text.js?v=20260625-live3";
+import { renderBarChart } from "../components/chart.js?v=20260625-live3";
+import { animateFillWidth } from "../utils/motion.js?v=20260625-live3";
+import { renderEventList } from "../components/event-list.js?v=20260625-live3";
+import { checkDiagnosticNotifications } from "../ui.js?v=20260625-live3";
 
 function diagnosticLabel(status) {
   return DIAGNOSTIC_LEVELS[status]?.label || "未知";
@@ -79,10 +80,11 @@ export function renderSummary() {
   if (resSig) {
     resSig.innerHTML = "";
     const fragment = document.createDocumentFragment();
-    gauges.forEach((g) => {
+    gauges.forEach((g, index) => {
       const kind = usageKind(g.value);
       const item = document.createElement("div");
-      item.className = `resource-card ${kind}`;
+      item.className = `resource-card ${kind} animate-in`;
+      item.style.animationDelay = `${index * 0.06}s`;
       const head = document.createElement("div");
       head.className = "resource-head";
       const title = document.createElement("span");
@@ -94,7 +96,7 @@ export function renderSummary() {
       track.className = "usage-track";
       const fill = document.createElement("div");
       fill.className = "usage-fill";
-      fill.style.width = `${Math.max(0, Math.min(100, Number(g.value || 0)))}%`;
+      animateFillWidth(fill, Number(g.value || 0), { fromZero: true });
       track.appendChild(fill);
       if (g.meta) {
         const foot = document.createElement("small");
@@ -148,10 +150,11 @@ export function renderOverviewTrace(insights) {
   if (cards) {
     cards.innerHTML = "";
     const fragment = document.createDocumentFragment();
-    cardItems.forEach(([title, value, meta, kind]) => {
+    cardItems.forEach(([title, value, meta, kind], index) => {
       // functionCard 在 astrbot view 中定义，这里内联实现以简化依赖
       const item = document.createElement("article");
-      item.className = `function-card ${kind || ""}`;
+      item.className = `function-card ${kind || ""} animate-in`;
+      item.style.animationDelay = `${index * 0.06}s`;
       const label = document.createElement("span");
       label.textContent = title;
       const number = document.createElement("strong");

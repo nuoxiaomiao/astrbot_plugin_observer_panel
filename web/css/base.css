@@ -168,6 +168,7 @@ input[type="search"]::placeholder {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+    transform: none !important;
   }
 }
 /* Status dot breathing animation */
@@ -423,4 +424,47 @@ button.spinning::before {
   color: var(--muted);
   text-align: center;
   font-style: italic;
+}
+
+.empty-state {
+  padding: 48px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+}
+
+.empty-icon {
+  font-size: 48px;
+  line-height: 1;
+  opacity: 0.7;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.empty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.empty-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted-dark);
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 0.7;
+    transform: translateY(0);
+  }
 }

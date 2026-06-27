@@ -2,13 +2,13 @@
 // 视图 - AstrBot
 // ============================================================================
 
-import { state } from "../state.js?v=20260621-flow3";
-import { MODULE_CHART_LIMIT } from "../config.js?v=20260621-flow3";
+import { state } from "../state.js?v=20260625-live3";
+import { MODULE_CHART_LIMIT } from "../config.js?v=20260625-live3";
 import {
   formatTime,
   formatNumber,
   formatCompactLogTime,
-} from "../utils/format.js?v=20260621-flow3";
+} from "../utils/format.js?v=20260625-live3";
 import {
   $,
   setText,
@@ -16,16 +16,16 @@ import {
   privacyText,
   renderSignature,
   badge,
-} from "../utils/dom.js?v=20260621-flow3";
-import { compactJson, compactText } from "../utils/log-text.js?v=20260621-flow3";
-import { renderBarChart } from "../components/chart.js?v=20260621-flow3";
+} from "../utils/dom.js?v=20260625-live3";
+import { compactJson, compactText } from "../utils/log-text.js?v=20260625-live3";
+import { renderBarChart } from "../components/chart.js?v=20260625-live3";
 import {
   countBy,
   aggregateModuleGroups,
   eventTypeLabel,
   eventTypeClass,
   sessionSourceLabel,
-} from "../log/analytics.js?v=20260621-flow3";
+} from "../log/analytics.js?v=20260625-live3";
 
 export function functionCard(title, value, meta, kind = "") {
   const item = document.createElement("article");
@@ -80,12 +80,35 @@ function withLiveBadge(chip, label, liveClass = "") {
   return chip;
 }
 
+function buildTypingDots() {
+  const wrap = document.createElement("span");
+  wrap.className = "session-typing";
+  wrap.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 3; i++) {
+    const dot = document.createElement("span");
+    dot.className = "session-typing-dot";
+    wrap.appendChild(dot);
+  }
+  return wrap;
+}
+
 function buildSessionStatus(status, session) {
   const wrap = document.createElement("div");
   wrap.className = "session-status-cluster";
   const chip = badge(status.label, status.kind);
   wrap.appendChild(withLiveBadge(chip, status.label, sessionIsLive(session) ? sessionLiveClass(session) : ""));
   return wrap;
+}
+
+function patchSessionStatus(wrap, status, session) {
+  if (!wrap) return;
+  const liveClass = sessionIsLive(session) ? sessionLiveClass(session) : "";
+  const existingBadge = wrap.querySelector(".badge");
+  if (existingBadge) {
+    patchFlowBadge(existingBadge, status.label, status.kind, liveClass);
+  } else {
+    wrap.replaceChildren(withLiveBadge(badge(status.label, status.kind), status.label, liveClass));
+  }
 }
 
 function formatDurationMs(value) {
@@ -117,7 +140,7 @@ function syncSessionListSelection() {
 
 function buildSessionCard(session) {
   const item = document.createElement("article");
-  item.className = "session-card is-new";
+  item.className = "session-card";
   item.tabIndex = 0;
   item.setAttribute("role", "button");
 
@@ -152,16 +175,22 @@ function buildSessionCard(session) {
     }
   });
   updateSessionCard(item, session);
+  item.classList.add("is-new");
   return item;
 }
 
 function updateSessionCard(item, session) {
   item.dataset.spanId = session.spanId || "";
-  item.className = "session-card";
-  if (session.spanId === state.selectedSessionId) item.classList.add("selected");
-  if (sessionIsLive(session)) item.classList.add("is-live", sessionLiveClass(session));
+  // 仅切换状态类，不重置 className，避免每次刷新重启 breathe/shimmer 动画
+  item.classList.remove("is-new");
+  item.classList.toggle("selected", session.spanId === state.selectedSessionId);
+  const live = sessionIsLive(session);
+  const liveClass = sessionLiveClass(session);
+  item.classList.toggle("is-live", live);
+  item.classList.toggle("is-running", live && liveClass === "is-running");
+  item.classList.toggle("is-generating", live && liveClass === "is-generating");
   item.setAttribute("aria-pressed", session.spanId === state.selectedSessionId ? "true" : "false");
-  item.setAttribute("aria-busy", sessionIsLive(session) ? "true" : "false");
+  item.setAttribute("aria-busy", live ? "true" : "false");
 
   const { label, kind } = sessionStatusMeta(session);
   const sender = item.querySelector(".session-card-title strong");
@@ -179,7 +208,12 @@ function updateSessionCard(item, session) {
     time.textContent = `${formatCompactLogTime({ timestamp: session.lastTs || session.startTs || 0 })} | ${sessionSourceLabel(session)}`;
   }
   if (status) {
-    status.replaceChildren(buildSessionStatus({ label, kind }, session));
+    const statusCluster = status.querySelector(".session-status-cluster");
+    if (statusCluster) {
+      patchSessionStatus(statusCluster, { label, kind }, session);
+    } else {
+      status.replaceChildren(buildSessionStatus({ label, kind }, session));
+    }
   }
   if (message) {
     message.textContent = privacyText(
@@ -190,7 +224,22 @@ function updateSessionCard(item, session) {
   if (duration) {
     duration.textContent = session.durationMs != null
       ? `总耗时 ${formatDurationMs(session.durationMs)}`
-      : (sessionIsLive(session) ? "等待更多阶段..." : "耗时未记录");
+      : (live ? `已运行 ${formatDurationMs((session.lastTs || Date.now()) - (session.startTs || Date.now()))}` : "耗时未记录");
+    duration.classList.toggle("is-live-timer", live);
+  }
+  const footer = item.querySelector(".session-card-footer");
+  if (footer) {
+    const existingDots = footer.querySelector(".session-typing");
+    if (live) {
+      if (!existingDots) footer.appendChild(buildTypingDots());
+    } else if (existingDots) {
+      existingDots.remove();
+    }
+  }
+  if (live && session.spanId === state.selectedSessionId) {
+    item.classList.add("is-selected-live");
+  } else {
+    item.classList.remove("is-selected-live");
   }
 }
 
@@ -199,7 +248,9 @@ function patchSessionList(list, sessions) {
     [...list.querySelectorAll(".session-card[data-span-id]")]
       .map((item) => [item.dataset.spanId, item]),
   );
-  const fragment = document.createDocumentFragment();
+  // 按目标顺序重排已有节点；仅在新节点出现或顺序变化时插入 DOM，
+  // 避免每次刷新都 replaceChildren 导致 CSS 动画重启（割裂感）。
+  let cursor = list.firstChild;
   sessions.forEach((session) => {
     let item = existing.get(session.spanId);
     if (!item) {
@@ -208,9 +259,27 @@ function patchSessionList(list, sessions) {
       existing.delete(session.spanId);
       updateSessionCard(item, session);
     }
-    fragment.appendChild(item);
+    // 将节点移动到当前游标之前（若已在正确位置则无需操作）
+    if (item !== cursor) {
+      list.insertBefore(item, cursor);
+    } else {
+      cursor = cursor.nextSibling;
+    }
   });
-  list.replaceChildren(fragment);
+  // 移除已不存在的会话卡片，清理定时器避免内存泄漏
+  existing.forEach((item) => {
+    const title = item.querySelector(".session-live-title");
+    const body = item.querySelector(".session-live-body");
+    if (title && title._switchTimers) {
+      title._switchTimers.forEach((id) => window.clearTimeout(id));
+      title._switchTimers = null;
+    }
+    if (body && body._switchTimers) {
+      body._switchTimers.forEach((id) => window.clearTimeout(id));
+      body._switchTimers = null;
+    }
+    item.remove();
+  });
 }
 
 function sessionDetailSignature(session) {
@@ -438,10 +507,50 @@ function buildFlowBadge(label, kind, liveClass = "") {
   return withLiveBadge(badge(label, kind), label, liveClass);
 }
 
+function patchFlowBadge(el, label, kind, liveClass = "") {
+  if (!el) return false;
+  // 检查 badge 的关键属性是否变化
+  const currentLabel = el.dataset.badgeLabel || "";
+  const currentLiveClass = el.dataset.badgeLiveClass || "";
+  if (currentLabel === label && currentLiveClass === (liveClass || "")) return false;
+
+  el.dataset.badgeLabel = label;
+  el.dataset.badgeLiveClass = liveClass || "";
+
+  // 更新 kind 类 — toggle 而非 reset，避免重启心跳动画
+  el.classList.toggle("ok", kind === "ok");
+  el.classList.toggle("warn", kind === "warn");
+  el.classList.toggle("bad", kind === "bad");
+  el.classList.toggle("debug", kind === "debug");
+
+  if (liveClass) {
+    el.classList.add("session-live-badge");
+    el.classList.toggle("is-running", liveClass === "is-running");
+    el.classList.toggle("is-generating", liveClass === "is-generating");
+    // 更新文字内容
+    const textEl = el.querySelector(".session-live-text");
+    if (textEl) {
+      textEl.textContent = label;
+      textEl.className = `session-live-text ${liveClass}`;
+    } else {
+      el.textContent = "";
+      const text = document.createElement("span");
+      text.className = `session-live-text ${liveClass}`;
+      text.textContent = label;
+      el.appendChild(text);
+    }
+  } else {
+    // 非 live：移除 live 相关类，恢复为普通文本
+    el.classList.remove("session-live-badge", "is-running", "is-generating");
+    el.textContent = label;
+  }
+  return true;
+}
+
 function buildFlowStep(step, index) {
   const row = document.createElement("article");
   row.className = `session-flow-step ${step.kind || ""} ${step.state || ""}`.trim();
-  row.style.setProperty("--step-delay", `${index * 0.07}s`);
+  row.style.setProperty("--step-delay", `${index * 0.05}s`);
   if (step.liveClass) row.classList.add(step.liveClass);
   row.dataset.stepKey = step.key;
 
@@ -487,9 +596,18 @@ function buildFlowStep(step, index) {
 }
 
 function updateFlowStep(row, step, index) {
-  row.className = `session-flow-step ${step.kind || ""} ${step.state || ""}`.trim();
-  row.style.setProperty("--step-delay", `${index * 0.07}s`);
-  if (step.liveClass) row.classList.add(step.liveClass);
+  // 保留 base 类，仅切换状态类，避免重启节点脉冲动画
+  row.classList.toggle("message", step.kind === "message");
+  row.classList.toggle("context", step.kind === "context");
+  row.classList.toggle("request", step.kind === "request");
+  row.classList.toggle("tool", step.kind === "tool");
+  row.classList.toggle("reply", step.kind === "reply");
+  row.classList.toggle("done", step.state === "done");
+  row.classList.toggle("running", step.state === "running");
+  row.classList.toggle("error", step.state === "error");
+  row.classList.toggle("is-generating", step.liveClass === "is-generating");
+  row.classList.toggle("is-running", step.liveClass === "is-running");
+  row.style.setProperty("--step-delay", `${index * 0.05}s`);
   row.dataset.stepKey = step.key;
 
   const title = row.querySelector(".session-flow-title");
@@ -506,7 +624,12 @@ function updateFlowStep(row, step, index) {
   }
   const badgeEl = row.querySelector(".session-flow-aside");
   if (badgeEl) {
-    badgeEl.replaceChildren(buildFlowBadge(step.badgeLabel, step.badgeKind, step.liveClass));
+    const existingBadge = badgeEl.querySelector(".badge");
+    if (existingBadge) {
+      patchFlowBadge(existingBadge, step.badgeLabel, step.badgeKind, step.liveClass || "");
+    } else {
+      badgeEl.replaceChildren(buildFlowBadge(step.badgeLabel, step.badgeKind, step.liveClass));
+    }
   }
   const meta = row.querySelector(".session-flow-meta");
   if (meta) {
@@ -527,7 +650,8 @@ function patchSessionFlow(container, steps, animateNew = true) {
     [...container.querySelectorAll(".session-flow-step[data-step-key]")]
       .map((item) => [item.dataset.stepKey, item]),
   );
-  const fragment = document.createDocumentFragment();
+  // 按目标顺序重排已有节点，避免 replaceChildren 导致动画重启
+  let cursor = container.firstChild;
   steps.forEach((step, index) => {
     let row = existing.get(step.key);
     if (!row) {
@@ -537,9 +661,14 @@ function patchSessionFlow(container, steps, animateNew = true) {
       existing.delete(step.key);
       updateFlowStep(row, step, index);
     }
-    fragment.appendChild(row);
+    if (row !== cursor) {
+      container.insertBefore(row, cursor);
+    } else {
+      cursor = cursor.nextSibling;
+    }
   });
-  container.replaceChildren(fragment);
+  // 移除已不存在的步骤
+  existing.forEach((row) => row.remove());
 }
 
 function buildSessionJourney(session, insights) {
@@ -758,9 +887,64 @@ function buildLiveStatusCard(session, insights) {
   const meta = document.createElement("div");
   meta.className = "session-live-meta";
 
-  card.append(head, body, meta);
+  const progress = document.createElement("div");
+  progress.className = "session-live-progress";
+  progress.setAttribute("aria-hidden", "true");
+
+  const scan = document.createElement("div");
+  scan.className = "session-live-scan";
+  scan.setAttribute("aria-hidden", "true");
+
+  card.append(scan, head, body, meta, progress);
   patchLiveStatusCard(card, session, insights, step, false);
   return card;
+}
+
+function setLiveText(el, newText, liveClass, animate) {
+  if (!el) return;
+  const current = el.dataset.liveText || "";
+  if (current === newText && !el.classList.contains("is-switching")) return;
+
+  // 取消上一次未完成的切换定时器，避免刷新打断动画时产生闪烁
+  if (el._switchTimers) {
+    el._switchTimers.forEach((id) => window.clearTimeout(id));
+    el._switchTimers = null;
+  }
+
+  el.dataset.liveText = newText;
+
+  if (!animate) {
+    el.classList.remove("is-switching");
+    el.replaceChildren();
+    el.appendChild(document.createTextNode(newText));
+    if (liveClass) el.appendChild(buildTypingDots());
+    return;
+  }
+
+  const timers = [];
+  el._switchTimers = timers;
+
+  // 丝滑切换：淡出模糊 → 替换文本 → 淡入清晰
+  el.classList.add("is-switching");
+  timers.push(window.setTimeout(() => {
+    // 检查元素是否仍在 DOM 中，避免在元素移除后操作
+    if (!el.parentNode) {
+      el._switchTimers = null;
+      return;
+    }
+    el.replaceChildren();
+    el.appendChild(document.createTextNode(newText));
+    if (liveClass) el.appendChild(buildTypingDots());
+  }, 200));
+  timers.push(window.setTimeout(() => {
+    // 检查元素是否仍在 DOM 中
+    if (!el.parentNode) {
+      el._switchTimers = null;
+      return;
+    }
+    el.classList.remove("is-switching");
+    el._switchTimers = null;
+  }, 440));
 }
 
 function patchLiveStatusCard(card, session, insights, step, animate) {
@@ -777,38 +961,63 @@ function patchLiveStatusCard(card, session, insights, step, animate) {
   const newMeta = joinMeta([step.timeLabel || "", step.meta || ""]);
   const liveClass = step.liveClass || sessionLiveClass(session);
 
-  const oldTitle = title ? title.textContent : "";
-  const oldBody = body ? body.textContent : "";
   const oldKey = card.dataset.stepKey || "";
-
+  const oldMeta = card.dataset.liveMeta || "";
   const contentChanged =
-    oldKey !== (step.key || "") || oldTitle !== newTitle || oldBody !== newBody;
+    oldKey !== (step.key || "") ||
+    (title ? (title.dataset.liveText || title.textContent) : "") !== newTitle ||
+    (body ? (body.dataset.liveText || body.textContent) : "") !== newBody;
+  const metaChanged = oldMeta !== newMeta;
 
-  if (animate && contentChanged) {
-    card.classList.remove("is-refreshing");
-    void card.offsetWidth;
-    card.classList.add("is-refreshing");
-  }
+  // 仅切换而非 remove+add，避免 softBreathe/shimmer 动画重启
+  card.classList.toggle("is-generating", liveClass === "is-generating");
+  card.classList.toggle("is-running", liveClass === "is-running");
 
-  card.classList.remove("is-generating", "is-running");
-  if (liveClass) card.classList.add(liveClass);
-
-  if (title) title.textContent = newTitle;
+  // 状态徽章：原地更新，避免重建导致心跳动画重启
   if (aside) {
-    aside.replaceChildren();
-    aside.appendChild(
-      buildFlowBadge(step.badgeLabel || "", step.badgeKind || "ok", liveClass),
-    );
+    const existingBadge = aside.querySelector(".badge");
+    if (existingBadge) {
+      patchFlowBadge(existingBadge, step.badgeLabel || "", step.badgeKind || "ok", liveClass);
+    } else {
+      aside.replaceChildren();
+      aside.appendChild(
+        buildFlowBadge(step.badgeLabel || "", step.badgeKind || "ok", liveClass),
+      );
+    }
   }
-  if (body) body.textContent = newBody;
+
+  if (contentChanged && animate) {
+    card.classList.remove("is-content-bump");
+    void card.offsetWidth;
+    card.classList.add("is-content-bump");
+    window.setTimeout(() => card.classList.remove("is-content-bump"), 480);
+  }
+
+  if (title) {
+    title.classList.toggle("session-live-copy", Boolean(liveClass));
+    title.classList.toggle("is-running", liveClass === "is-running");
+    title.classList.toggle("is-generating", liveClass === "is-generating");
+  }
+
+  // 标题 / 正文使用丝滑切换动画（仅内容变化时）
+  setLiveText(title, newTitle, "", animate && contentChanged);
+  setLiveText(body, newBody, liveClass, animate && contentChanged);
+
   if (meta) {
     meta.replaceChildren();
     const metaText = document.createElement("small");
     metaText.textContent = newMeta;
     meta.appendChild(metaText);
+    if (metaChanged && animate) {
+      meta.classList.remove("is-meta-tick");
+      void meta.offsetWidth;
+      meta.classList.add("is-meta-tick");
+      window.setTimeout(() => meta.classList.remove("is-meta-tick"), 360);
+    }
   }
 
   card.dataset.stepKey = step.key || "";
+  card.dataset.liveMeta = newMeta;
 }
 
 function buildSessionOverview(session) {
@@ -832,11 +1041,12 @@ function buildSessionOverview(session) {
 
   const meta = document.createElement("div");
   meta.className = "session-overview-meta";
+  const live = sessionIsLive(session);
   [
     ["模型", [session.providerId, session.model].filter(Boolean).join(" / ") || "--"],
     ["规则", session.personaId || "--"],
     ["工具", formatNumber((session.tools || []).length)],
-    ["耗时", session.durationMs != null ? formatDurationMs(session.durationMs) : (sessionIsLive(session) ? "进行中" : "--")],
+    ["总耗时", session.durationMs != null ? formatDurationMs(session.durationMs) : (live ? `${formatDurationMs((session.lastTs || Date.now()) - (session.startTs || Date.now()))}+` : "--")],
   ].forEach(([label, value]) => {
     const chip = document.createElement("div");
     chip.className = "session-overview-chip";
@@ -852,15 +1062,64 @@ function buildSessionOverview(session) {
   return section;
 }
 
+function patchSessionOverview(section, session) {
+  if (!section) return;
+  const live = sessionIsLive(session);
+  const liveClass = sessionLiveClass(session);
+  section.classList.toggle("is-live", live);
+  section.classList.toggle("is-running", live && liveClass === "is-running");
+  section.classList.toggle("is-generating", live && liveClass === "is-generating");
+
+  const title = section.querySelector(".session-overview-head h3");
+  if (title) {
+    title.textContent = state.privacyMode ? "已隐藏发送者" : (session.senderName || "未记录发送者");
+  }
+  const subtitle = section.querySelector(".session-overview-head p");
+  if (subtitle) {
+    subtitle.textContent = joinMeta([
+      sessionSourceLabel(session),
+      session.startTs ? `开始于 ${formatTime(session.startTs)}` : "",
+    ]);
+  }
+  const statusHost = section.querySelector(".session-overview-head");
+  if (statusHost) {
+    const status = sessionStatusMeta(session);
+    const statusCluster = statusHost.querySelector(".session-status-cluster");
+    if (statusCluster) {
+      patchSessionStatus(statusCluster, status, session);
+    } else {
+      const oldStatus = statusHost.querySelector(".session-status-cluster");
+      const newStatus = buildSessionStatus(status, session);
+      if (oldStatus) oldStatus.replaceWith(newStatus);
+      else statusHost.appendChild(newStatus);
+    }
+  }
+  const chips = section.querySelectorAll(".session-overview-chip strong");
+  const values = [
+    [session.providerId, session.model].filter(Boolean).join(" / ") || "--",
+    session.personaId || "--",
+    formatNumber((session.tools || []).length),
+    session.durationMs != null ? formatDurationMs(session.durationMs) : (live ? `${formatDurationMs((session.lastTs || Date.now()) - (session.startTs || Date.now()))}+` : "--"),
+  ];
+  chips.forEach((el, idx) => {
+    if (values[idx] != null && el.textContent !== values[idx]) el.textContent = values[idx];
+  });
+}
+
 function renderSessionDetail(session, insights) {
   const detail = renderSignature("sessionDetail", sessionDetailSignature(session));
   const host = $("sessionDetail");
   if (!host) return;
-  host.classList.toggle("session-detail-live", sessionIsLive(session));
+  const live = session && sessionIsLive(session);
+  host.classList.toggle("session-detail-live", Boolean(live));
+  host.classList.toggle("is-generating", Boolean(live && sessionLiveClass(session) === "is-generating"));
+  host.classList.toggle("is-running", Boolean(live && sessionLiveClass(session) === "is-running"));
   if (!session) {
-    host.classList.remove("session-detail-live");
+    host.classList.remove("session-detail-live", "is-generating", "is-running");
     host.dataset.currentSpanId = "";
     host.dataset.liveMode = "";
+    // 清理可能存在的定时器
+    cleanupLiveTimers(host);
     if (detail) {
       host.innerHTML = "";
       host.appendChild(emptyBlock("选择一条有效会话后，这里会显示消息、回复、工具调用和阶段时间线。"));
@@ -876,11 +1135,14 @@ function renderSessionDetail(session, insights) {
   const hasLiveCard = Boolean(host.querySelector(".session-live-card"));
 
   if (!sameSession) {
+    // 切换会话时清理旧会话的定时器
+    cleanupLiveTimers(host);
     host.dataset.currentSpanId = session.spanId || "";
   }
 
   if (isLive) {
     if (!sameSession || !hasLiveCard || wasLive === false) {
+      cleanupLiveTimers(host);
       host.dataset.liveMode = "1";
       host.innerHTML = "";
       const journey = document.createElement("section");
@@ -898,7 +1160,7 @@ function renderSessionDetail(session, insights) {
     }
 
     const overview = host.querySelector(".session-overview-card");
-    if (overview) overview.replaceWith(buildSessionOverview(session));
+    if (overview) patchSessionOverview(overview, session);
     const liveCard = host.querySelector(".session-live-card");
     if (liveCard) patchLiveStatusCard(liveCard, session, insights, null, Boolean(detail));
     return;
@@ -907,6 +1169,7 @@ function renderSessionDetail(session, insights) {
   host.dataset.liveMode = "0";
 
   if (!sameSession || (!hasFlow && !hasLiveCard)) {
+    cleanupLiveTimers(host);
     host.innerHTML = "";
     const journey = document.createElement("section");
     journey.className = "session-journey";
@@ -928,26 +1191,51 @@ function renderSessionDetail(session, insights) {
 
   const animateNew = Boolean(detail);
   const overview = host.querySelector(".session-overview-card");
-  if (overview) overview.replaceWith(buildSessionOverview(session));
+  if (overview) patchSessionOverview(overview, session);
 
   if (hasLiveCard) {
-    const flowWrap = document.createElement("section");
-    flowWrap.className = "session-flow-wrap";
-    const flowTitle = document.createElement("h3");
-    flowTitle.textContent = "会话进程";
-    const flow = document.createElement("div");
-    flow.className = "session-flow";
-    patchSessionFlow(flow, buildSessionJourney(session, insights), false);
-    flowWrap.append(flowTitle, flow);
     const liveWrap = host.querySelector(".session-live-wrap");
-    if (liveWrap && liveWrap.parentNode) {
-      liveWrap.parentNode.replaceChild(flowWrap, liveWrap);
+    // 防止重复触发 live→complete 过渡
+    if (liveWrap && !liveWrap.classList.contains("is-leaving")) {
+      liveWrap.classList.add("is-leaving");
+
+      const flowWrap = document.createElement("section");
+      flowWrap.className = "session-flow-wrap is-entering";
+      const flowTitle = document.createElement("h3");
+      flowTitle.textContent = "会话进程";
+      const flow = document.createElement("div");
+      flow.className = "session-flow";
+      patchSessionFlow(flow, buildSessionJourney(session, insights), true);
+      flowWrap.append(flowTitle, flow);
+
+      // 在 live 卡片淡出后替换为 flow 并触发淡入
+      window.setTimeout(() => {
+        // 检查 liveWrap 仍在 DOM 中（未被其他渲染清除）
+        if (!liveWrap.parentNode) return;
+        // 清理 live 卡片中的定时器
+        cleanupLiveTimers(liveWrap);
+        liveWrap.parentNode.replaceChild(flowWrap, liveWrap);
+        // 强制重排后移除 is-entering，触发 CSS 过渡淡入
+        void flowWrap.offsetWidth;
+        flowWrap.classList.remove("is-entering");
+      }, 280);
     }
     return;
   }
 
   const flow = host.querySelector(".session-flow");
   if (flow) patchSessionFlow(flow, buildSessionJourney(session, insights), animateNew);
+}
+
+function cleanupLiveTimers(container) {
+  if (!container) return;
+  const elements = container.querySelectorAll(".session-live-title, .session-live-body");
+  elements.forEach((el) => {
+    if (el._switchTimers) {
+      el._switchTimers.forEach((id) => window.clearTimeout(id));
+      el._switchTimers = null;
+    }
+  });
 }
 
 export function renderRuntimeStats(insights) {

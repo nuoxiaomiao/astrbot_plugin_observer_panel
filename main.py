@@ -33,7 +33,7 @@ except ImportError:
 
 
 PLUGIN_NAME = "astrbot_plugin_observer_panel"
-PLUGIN_VERSION = "0.3.2"
+PLUGIN_VERSION = "0.4.2"
 
 DEFAULT_ASTRBOT_LOG_FILES = ["astrbot.log", "astrbot.trace.log"]
 DEFAULT_THRESHOLDS = {
@@ -774,7 +774,7 @@ def _interface_addresses() -> dict[str, list[str]]:
 
 @register(
     PLUGIN_NAME,
-    "Codex",
+    "nuoxiaomiao",
     "独立端口 WebUI，用于查看系统资源、AstrBot 状态和日志。",
     PLUGIN_VERSION,
 )

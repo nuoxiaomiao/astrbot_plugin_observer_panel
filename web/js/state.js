@@ -16,6 +16,7 @@ export const state = {
   },
   refreshing: false,
   pendingRefresh: false,
+  refreshError: null,  // 记录刷新错误信息
   openDetails: new Set(),
   highlightLogEntryId: "",
   selectedEventId: "",

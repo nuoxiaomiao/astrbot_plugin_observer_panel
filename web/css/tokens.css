@@ -7,10 +7,10 @@
   --surface-hover: #20252c;
   --line: rgba(255, 255, 255, 0.08);
   --line-strong: rgba(255, 255, 255, 0.14);
-  --text: #e8ecef;
+  --text: #eef2f5;
   --text-bright: #f4f7f9;
-  --muted: #9aa3ad;
-  --muted-dark: #727c87;
+  --muted: #a8b3bf;
+  --muted-dark: #8a95a1;
   --accent: #30a46c;
   --accent-bright: #4cc38a;
   --accent-dim: #238553;
@@ -66,4 +66,18 @@
   --space-8: 32px;
   --space-10: 40px;
   --space-12: 48px;
+  /* Motion tokens for WebUI animations */
+  --motion-enter-duration: 0.4s;
+  --motion-stagger-step: 0.06s;
+  --motion-view-duration: 0.22s;
+  --motion-live-slow: 2.4s;
+  --motion-live-fast: 1.35s;
+
+  /* Live conversation motion (tier 2) */
+  --live-shimmer-running: 1.2s;
+  --live-shimmer-generating: 0.75s;
+  --live-progress-running: 1.1s;
+  --live-progress-generating: 0.7s;
+  --live-glow-running: rgba(113, 183, 255, 0.55);
+  --live-glow-generating: rgba(227, 179, 65, 0.75);
 }

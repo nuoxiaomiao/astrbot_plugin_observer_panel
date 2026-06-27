@@ -66,9 +66,9 @@
   min-width: 2px;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--accent-dim) 0%, var(--accent-bright) 100%);
-  box-shadow: 0 0 8px rgba(48, 164, 108, 0.4);  /* Grafana 风格发光效果 */
+  box-shadow: 0 0 8px rgba(48, 164, 108, 0.4);
   position: relative;
-  transition: box-shadow 0.3s ease;
+  transition: width 0.55s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
 }
 
 .usage-fill:hover {
@@ -290,4 +290,21 @@
 .level-info .bar-fill {
   background: linear-gradient(90deg, var(--info) 0%, var(--info-bright) 100%);
   box-shadow: 0 0 8px rgba(76, 154, 255, 0.4);
+}
+
+
+.bar-fill.is-entering,
+.usage-fill.is-entering {
+  box-shadow: 0 0 10px rgba(76, 154, 255, 0.35);
+}
+
+.bar-fill.is-pulse,
+.usage-fill.is-pulse {
+  animation: barPulse 0.55s var(--ease-out);
+}
+
+@keyframes barPulse {
+  0% { filter: brightness(1); }
+  45% { filter: brightness(1.35); }
+  100% { filter: brightness(1); }
 }

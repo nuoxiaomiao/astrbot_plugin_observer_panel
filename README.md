@@ -58,7 +58,7 @@ http://127.0.0.1:7199/?token=你的令牌
 {
   "ok": true,
   "plugin": "astrbot_plugin_observer_panel",
-  "version": "0.3.2",
+  "version": "0.4.2",
   "uptime_seconds": 123.456,
   "log_mode": "file",
   "log_stream_available": false,

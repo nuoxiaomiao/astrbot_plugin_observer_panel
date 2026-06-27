@@ -4,6 +4,9 @@
   font-size: 12px;
   font-weight: 500;
   border-radius: 999px;
+  transition: background var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
 }
 
 .action-btn.active {
@@ -61,6 +64,10 @@
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--muted);
+  transition: background var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
 }
 
 .event-filter:hover,
@@ -83,6 +90,9 @@
   font-weight: 500;
   border-radius: 999px;
   min-width: 40px;
+  transition: background var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
 }
 
 .time-filter.active {
@@ -132,6 +142,10 @@
   font-size: 12px;
   font-weight: 500;
   border-radius: 999px;
+  transition: background var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
 }
 
 .regex-toggle.active {
