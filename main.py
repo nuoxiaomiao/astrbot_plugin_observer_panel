@@ -883,6 +883,10 @@ class ObserverPanelPlugin(Star):
         response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
+        # 静态资源(CSS/JS 等)默认走 aiohttp 启发式缓存,改动后浏览器可能仍用旧文件。
+        # 统一要求重新校验,避免前端样式/脚本更新不生效。已显式设置缓存头的响应不覆盖。
+        if "Cache-Control" not in response.headers:
+            response.headers["Cache-Control"] = "no-cache"
         return response
 
     @web.middleware
