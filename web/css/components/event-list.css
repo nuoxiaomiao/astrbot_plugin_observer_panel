@@ -1,0 +1,239 @@
+.event-list {
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  max-height: 560px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.compact-events {
+  max-height: 260px;
+}
+
+.event-item {
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  transition: background var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+  contain: layout paint;
+}
+
+.event-item:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+}
+
+.event-item.selectable {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.event-item.selected {
+  border-color: var(--line-strong);
+  border-left-color: var(--info-bright);
+  background: rgba(76, 154, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(76, 154, 255, 0.12);
+}
+
+.event-select-hint {
+  color: var(--muted-dark);
+  font-size: 11px;
+}
+
+.event-message-in {
+  border-left-color: var(--info-bright);
+}
+
+.event-message-out {
+  border-left-color: var(--accent-bright);
+}
+
+.event-tool {
+  border-left-color: var(--warn-bright);
+}
+
+.event-persona,
+.event-model {
+  border-left-color: var(--debug-bright);
+}
+
+.event-memory {
+  border-left-color: var(--memory-bright);
+}
+
+.event-waking {
+  border-left-color: var(--waking-bright);
+}
+
+.event-provider {
+  border-left-color: var(--provider-bright);
+}
+
+.event-cleanup {
+  border-left-color: var(--cleanup-bright);
+}
+
+.event-hook,
+.event-agent-stage,
+.event-pipeline,
+.event-decorate,
+.event-plugin-lifecycle,
+.event-conversation {
+  border-left-color: var(--debug-bright);
+}
+
+.event-slow {
+  border-left-color: var(--warn-bright);
+  background: rgba(210, 153, 34, 0.08);
+}
+
+.event-warn {
+  border-left-color: var(--warn-bright);
+}
+
+.event-error {
+  border-left-color: var(--danger-bright);
+  background: rgba(248, 81, 73, 0.08);
+}
+
+.event-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.event-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.event-title strong {
+  color: var(--text-bright);
+  overflow-wrap: anywhere;
+}
+
+.event-title small,
+.event-item p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.event-item p {
+  margin: 0;
+}
+
+.event-chain {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.event-chain summary,
+.event-evidence summary {
+  width: fit-content;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  transition: var(--transition);
+}
+
+.event-chain summary:hover,
+.event-evidence summary:hover {
+  color: var(--text-bright);
+  background: var(--surface-3);
+}
+
+.event-evidence {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.evidence-grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.evidence-row {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.evidence-row span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.evidence-row strong {
+  color: var(--text);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.evidence-actions {
+  margin-top: 8px;
+}
+
+.evidence-raw {
+  margin: 8px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  padding: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.event-chain-list {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.event-chain-row {
+  border-left: 3px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(13, 17, 23, 0.55);
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.event-chain-row span {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.event-chain-row strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+

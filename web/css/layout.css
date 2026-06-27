@@ -1,0 +1,629 @@
+.shell {
+  width: 100%;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 360px;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg);
+  transition: grid-template-columns var(--duration-normal) var(--ease-out);
+}
+
+/* ==================== 详情列/侧栏列显隐控制（问题1+2） ====================
+   主区域用 minmax(0, 1fr) 自动占满剩余空间；侧栏列与详情列独立控制宽度。
+   折叠/隐藏时宽度归 0，主区自动撑满。 */
+
+/* 非日志页隐藏详情列 */
+body.detail-hidden .shell {
+  grid-template-columns: 280px minmax(0, 1fr) 0px;
+}
+
+/* 侧边栏折叠（不论详情列是否隐藏） */
+body.sidebar-collapsed .shell {
+  grid-template-columns: 0px minmax(0, 1fr) 360px;
+}
+
+/* 同时折叠侧边栏且隐藏详情列：主区占满 */
+body.sidebar-collapsed.detail-hidden .shell {
+  grid-template-columns: 0px minmax(0, 1fr) 0px;
+}
+
+body.detail-hidden .workspace-detail,
+body.sidebar-collapsed .workspace-sidebar {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 折叠/隐藏时的内容淡出过渡（问题2） */
+.workspace-sidebar,
+.workspace-detail {
+  transition: opacity var(--duration-normal) var(--ease-out),
+              visibility 0s linear var(--duration-normal);
+}
+
+body.sidebar-collapsed .workspace-sidebar {
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out),
+              visibility 0s linear 0s;
+}
+
+body.detail-hidden .workspace-detail {
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out),
+              visibility 0s linear 0s;
+}
+
+/* sidebar 内部子块在折叠时也有渐入效果 */
+.workspace-sidebar > * {
+  transition: transform var(--duration-normal) var(--ease-out), opacity var(--duration-normal) var(--ease-out);
+}
+
+body.sidebar-collapsed .workspace-sidebar > * {
+  transform: translateX(-12px);
+  opacity: 0;
+}
+
+.sidebar-collapse-btn,
+.sidebar-expand-btn,
+.mobile-menu-btn {
+  min-width: 32px;
+  width: 32px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: none;
+  flex: 0 0 auto;
+}
+
+/* 折叠/展开按钮现在位于 workspace-head；默认展开时只显示折叠按钮 */
+body:not(.sidebar-collapsed) .sidebar-expand-btn {
+  display: none;
+}
+
+body.sidebar-collapsed .sidebar-collapse-btn {
+  display: none;
+}
+
+.sidebar-expand-btn[hidden] {
+  display: none;
+}
+
+/* 汉堡菜单默认隐藏，仅在移动端显示 */
+.mobile-menu-btn {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: inline-flex !important;
+  }
+
+  /* 移动端抽屉由汉堡菜单控制，隐藏桌面折叠按钮 */
+  .sidebar-collapse-btn,
+  .sidebar-expand-btn {
+    display: none !important;
+  }
+
+  /* 顶部副标题在移动端隐藏，避免空间不足 */
+  #workspaceMeta {
+    display: none;
+  }
+}
+
+/* ==================== Responsive Breakpoints ==================== */
+
+/* Tablet breakpoint - Hide detail panel, make it slide-in */
+@media (max-width: 1400px) {
+  .shell {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  /* Detail panel becomes fixed overlay sliding from right */
+  .workspace-detail {
+    position: fixed;
+    right: -100%;
+    top: 0;
+    height: 100%;
+    width: 360px;
+    transition: right var(--duration-normal) var(--ease-out);
+    z-index: 1000;
+    background: var(--bg);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .workspace-detail.open {
+    right: 0;
+  }
+
+  /* Backdrop overlay when detail panel is open */
+  body.detail-open::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 999;
+    animation: fadeIn var(--motion-view-duration, 0.22s);
+  }
+}
+
+/* Mobile breakpoint - Single column, sidebar slide-in */
+@media (max-width: 768px) {
+  .shell {
+    grid-template-columns: 1fr;
+    padding: 8px;
+    gap: 8px;
+  }
+
+  /* Sidebar becomes fixed drawer sliding from left */
+  .workspace-sidebar {
+    position: fixed;
+    left: -100%;
+    top: 0;
+    height: 100%;
+    width: 280px;
+    transition: left var(--duration-normal) var(--ease-out);
+    z-index: 999;
+    background: var(--bg);
+    box-shadow: var(--shadow-lg);
+    padding: 12px;
+  }
+
+  body.sidebar-open .workspace-sidebar {
+    left: 0;
+  }
+
+  body.sidebar-open::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 998;
+    animation: fadeIn var(--motion-view-duration, 0.22s);
+  }
+
+  .workspace-detail {
+    position: fixed;
+    right: -100%;
+    width: 100%;
+    max-width: 360px;
+  }
+
+  .workspace-main {
+    min-height: auto;
+  }
+
+  /* Mobile simplified layouts - single column */
+  .layout.two {
+    grid-template-columns: 1fr;
+  }
+
+  .big-screen-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Disable hover effects on mobile for better touch experience */
+  .panel:hover {
+    transform: none;
+    border-color: var(--line);
+  }
+
+  button:hover {
+    transform: none;
+    background: var(--surface-2);
+  }
+
+  .metric:hover,
+  .mini-metric:hover {
+    border-color: var(--line);
+    box-shadow: var(--shadow-sm);
+  }
+}
+
+/* Small screen optimization - Full-width sidebar, optimized spacing */
+@media (max-width: 480px) {
+  .workspace-sidebar {
+    width: 100%;
+  }
+
+  .panel {
+    padding: 12px;
+  }
+
+  .panel-head {
+    padding: 12px;
+  }
+
+  /* Maintain 44px minimum touch target even on small screens */
+  button {
+    min-height: 44px;
+    padding: 0 14px;
+    font-size: 14px;
+  }
+
+  /* Optimize spacing for small screens */
+  .shell {
+    padding: 4px;
+    gap: 6px;
+  }
+
+  .topbar {
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+  }
+}
+
+.workspace-sidebar,
+.workspace-main,
+.workspace-detail {
+  min-width: 0;
+}
+
+.workspace-sidebar {
+  min-height: calc(100vh - 24px);
+  display: grid;
+  grid-template-rows: auto auto auto auto;
+  align-content: start;
+  gap: 12px;
+}
+
+.workspace-main {
+  min-height: calc(100vh - 24px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.workspace-detail {
+  min-height: calc(100vh - 24px);
+}
+
+.brand-block,
+.workspace-head,
+.sidebar-status {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.brand-block {
+  padding: 18px 16px;
+}
+
+.brand-block h1 {
+  margin: 0;
+  color: var(--text-bright);
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.brand-block p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.workspace-head {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 10px 16px;
+}
+
+.workspace-head >strong {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-bright);
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+.workspace-head >span:not(.head-actions) {
+  color: var(--muted-dark);
+  font-size: 12px;
+  white-space: nowrap;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+  margin-left: 2px;
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* ==================== 紧凑模式（3.2） ==================== */
+body.compact {
+  --radius: 3px;
+  --radius-lg: 4px;
+  font-size: 13px;
+}
+
+body.compact .shell {
+  gap: 8px;
+  padding: 8px;
+}
+
+body.compact .panel {
+  padding: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+body.compact .panel:hover {
+  transform: none;
+}
+
+body.compact .panel-head {
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+body.compact .panel-head h2 {
+  font-size: 14px;
+}
+
+body.compact .kv,
+body.compact .bar-chart,
+body.compact .big-screen-grid,
+body.compact .resource-grid,
+body.compact .config-grid,
+body.compact .stack-list,
+body.compact .detail-body,
+body.compact .event-list {
+  padding: 8px 10px;
+  gap: 6px;
+}
+
+body.compact .metric {
+  padding: 8px;
+  min-height: 60px;
+}
+
+body.compact .metric strong {
+  font-size: 17px;
+  margin-top: 4px;
+}
+
+body.compact .function-card {
+  padding: 8px;
+  min-height: 76px;
+}
+
+body.compact .function-card strong {
+  font-size: 19px;
+}
+
+body.compact .event-item {
+  padding: 7px 9px;
+  gap: 5px;
+}
+
+body.compact .resource-card,
+body.compact .stack-item {
+  padding: 10px;
+  gap: 8px;
+}
+
+body.compact .brand-block {
+  padding: 12px;
+}
+
+body.compact .brand-block h1 {
+  font-size: 18px;
+  margin-bottom: 5px;
+}
+
+body.compact .log-entry {
+  padding: 6px 10px;
+}
+
+.sidebar-status {
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent-bright);
+  box-shadow: 0 0 0 3px rgba(48, 164, 108, 0.14);
+  animation: breathe 2s ease-in-out infinite;
+}
+
+.sidebar-status > span:not(.status-dot) {
+  color: var(--muted);
+  font-size: 12px;
+  flex: 1 1 auto;
+}
+
+.sidebar-status .toggle {
+  min-height: auto;
+  font-size: 12px;
+  gap: 6px;
+}
+
+.sidebar-status #refreshBtn {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 999px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar h1 {
+  margin: 0 0 6px;
+  font-size: clamp(24px, 2.7vw, 34px);
+  font-weight: 700;
+  color: var(--text-bright);
+  letter-spacing: 0;
+}
+
+.topbar p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+body.privacy-mode .log-entry-details {
+  display: none;
+}
+/* ==================== Additional Breakpoints for Better Responsiveness ==================== */
+
+/* Large tablet breakpoint - three-column layouts collapse */
+@media (max-width: 1120px) {
+  .layout.three {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Standard tablet - single column layouts */
+@media (max-width: 980px) {
+  .shell {
+    padding: 14px;
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-sidebar,
+  .workspace-main,
+  .workspace-detail,
+  .detail-panel {
+    min-height: auto;
+    height: auto;
+  }
+
+  .workspace-sidebar {
+    grid-template-rows: auto auto auto auto;
+  }
+
+  .status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .status-grid,
+  .log-metrics,
+  .layout.two {
+    grid-template-columns: 1fr;
+  }
+
+  .status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #logs.view.active {
+    grid-template-columns: 1fr;
+  }
+
+  .big-screen-grid,
+  .function-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .state-viz {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr) 72px;
+  }
+
+  .row .cell:nth-child(3),
+  .row .cell:nth-child(4),
+  .row.header .cell:nth-child(3),
+  .row.header .cell:nth-child(4) {
+    display: none;
+  }
+
+  .kv-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .panel-head input[type="search"] {
+    width: 100%;
+  }
+
+  .info-item .detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .code-block,
+  .table {
+    min-height: 300px;
+    max-height: 520px;
+  }
+
+  .log-time,
+  .log-line,
+  .log-module {
+    max-width: 100%;
+  }
+
+  .module-chart,
+  .log-entry,
+  .event-chain-row,
+  .evidence-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Extra small screens - all grids become single column */
+@media (max-width: 560px) {
+  .status-grid,
+  .big-screen-grid,
+  .function-grid,
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pager {
+    justify-content: stretch;
+  }
+
+  .pager button,
+  .pager span {
+    flex: 1;
+  }
+}
+/* 标题渐变 */
+.brand-block h1 {
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+

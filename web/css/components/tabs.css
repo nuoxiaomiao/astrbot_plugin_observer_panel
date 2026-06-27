@@ -1,0 +1,149 @@
+.tabs {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  margin: 0;
+  background: var(--surface);
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+  box-shadow: var(--shadow-card);
+}
+
+.tab {
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  padding: 0 12px;
+  justify-content: flex-start;
+  text-align: left;
+  font-weight: 500;
+  font-size: 13px;
+  box-shadow: none;
+  position: relative;
+  transition: all var(--duration-fast) var(--ease-out);
+  touch-action: manipulation;
+}
+
+.tab::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--gradient-accent);
+  transform: translateX(-50%);
+  transition: width var(--duration-fast) var(--ease-out);
+}
+
+.tab:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.tab.active {
+  color: var(--info-bright);
+  border-color: rgba(76, 154, 255, 0.2);
+  border-left-color: var(--info-bright);
+  background: var(--gradient-subtle);
+}
+
+.tab.active::after {
+  width: 80%;
+}
+
+.tab:hover:not(.active)::after {
+  width: 60%;
+  opacity: 0.6;
+}
+
+.view {
+  display: none;
+  min-height: 0;
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+.view.active {
+  display: block;
+  min-height: 0;
+  overflow: auto;
+  opacity: 1;
+}
+
+#logs.view.active {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-content: start;
+}
+.layout {
+  display: grid;
+  gap: 16px;
+}
+
+.layout.two {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.layout.three {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.subtabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.subtab {
+  min-height: 36px;
+  box-shadow: none;
+  touch-action: manipulation;
+  border-radius: 999px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.subtab:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.subtab.active {
+  border-color: var(--accent-bright);
+  background: rgba(48, 164, 108, 0.14);
+  color: var(--accent-bright);
+}
+
+.astrbot-subview {
+  display: none;
+  min-height: 0;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--motion-view-duration) var(--ease-out),
+              transform var(--motion-view-duration) var(--ease-out);
+}
+
+.astrbot-subview.active {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.astrbot-subview > .panel {
+  margin-bottom: 12px;
+}

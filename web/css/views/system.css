@@ -1,0 +1,75 @@
+.system-sections {
+  margin-top: 14px;
+}
+.kv {
+  padding: 14px 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.kv-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 28px;
+  align-items: start;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.kv-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.kv-key {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.kv-value {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.table {
+  max-height: calc(100vh - 310px);
+  min-height: 360px;
+  overflow: auto;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.2fr) 78px minmax(120px, 0.8fr) minmax(0, 1.8fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  transition: var(--transition);
+}
+
+.row.header {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 1;
+  letter-spacing: 0;
+}
+
+.row:not(.header):hover {
+  background: var(--surface-hover);
+}
+
+.cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+

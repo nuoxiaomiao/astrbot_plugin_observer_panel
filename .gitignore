@@ -8,6 +8,17 @@ build/
 dist/
 *.egg-info/
 
+# Node / frontend tooling (Playwright tests only; not a runtime dep)
+node_modules/
+package.json
+package-lock.json
+test_panel.js
+test_panel.py
+
+# Debug screenshots / image artifacts
+debug_*.png
+screenshot_*.png
+
 # IDE / editors
 .vscode/
 .idea/

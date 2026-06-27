@@ -17,7 +17,7 @@
   },
   "access_token": {
     "description": "访问令牌",
-    "hint": "留空则本机 API 不鉴权；监听 0.0.0.0 时远程 API 会要求配置令牌。设置后可手动打开 http://host:port/?token=你的令牌。",
+    "hint": "留空则仅本机可直接访问；监听 0.0.0.0 时远程请求会被拒绝。设置后可先打开 http://host:port/?token=你的令牌 完成认证。",
     "type": "string",
     "default": ""
   },
@@ -25,12 +25,6 @@
     "description": "前端自动刷新间隔（秒）",
     "type": "int",
     "default": 5
-  },
-  "enable_log_stream": {
-    "description": "启用 LogBroker 实时日志流（SSE）",
-    "hint": "默认关闭，只通过定时轮询读取日志文件；开启后会建立 SSE 连接获取实时日志。",
-    "type": "bool",
-    "default": false
   },
   "astrbot": {
     "description": "AstrBot 数据源配置",

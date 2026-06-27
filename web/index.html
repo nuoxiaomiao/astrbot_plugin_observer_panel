@@ -8,7 +8,7 @@
     <meta name="color-scheme" content="dark">
     <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📊</text></svg>'>
     <title>AstrBot 观察面板</title>
-    <link rel="stylesheet" href="/styles.css?v=0.3.0">
+    <link rel="stylesheet" href="/css/main.css?v=20260627-calm4">
   </head>
   <body>
     <main class="shell">
@@ -148,6 +148,17 @@
         </nav>
 
         <section id="astrbotSessions" class="astrbot-subview active" role="tabpanel">
+          <section class="panel">
+            <div class="panel-head">
+              <h2>有效会话</h2>
+              <span id="sessionListHint">--</span>
+            </div>
+            <div class="session-visual-layout">
+              <div id="sessionList" class="session-list" aria-label="已触发回复的会话列表"></div>
+              <div id="sessionDetail" class="session-detail" aria-label="会话详情"></div>
+            </div>
+          </section>
+
           <div class="layout two runtime-stats-layout">
             <section class="panel">
               <div class="panel-head">
@@ -215,10 +226,9 @@
         </section>
 
         <section id="logs" class="view" role="tabpanel" aria-labelledby="tab-logs" hidden>
-        <div id="sseStatus" class="sse-status sse-status-unavailable" role="status" aria-live="polite">
-          <span class="sse-dot" aria-hidden="true"></span>
-          <span class="sse-text">文件模式（非实时）</span>
-          <button id="sseReconnectBtn" class="sse-reconnect-btn" type="button" hidden title="重新连接实时日志流">重连</button>
+        <div class="log-mode-status" role="status" aria-live="polite">
+          <span class="log-mode-dot" aria-hidden="true"></span>
+          <span>文件轮询模式，当前版本不提供实时日志流。</span>
         </div>
         <section class="panel important-panel">
           <div class="panel-head">
@@ -296,6 +306,6 @@
     </main>
 
     <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-    <script src="/app.js?v=0.3.0"></script>
+    <script type="module" src="/js/main.js?v=20260627-calm4"></script>
   </body>
 </html>
