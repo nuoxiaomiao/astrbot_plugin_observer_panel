@@ -1382,6 +1382,20 @@
   background-image: none;
 }
 
+/* 4b. 标题/正文 .session-live-copy 的渐变底色:原为文字流光渐变,
+   但未配 background-clip:text,关动画后渐变显成文字背后的浅色块。
+   清掉 background-image,回归纯文字。 */
+.session-live-copy,
+.session-live-copy.is-running,
+.session-live-copy.is-generating,
+.session-live-body.session-live-copy,
+.session-live-body.session-live-copy.is-running,
+.session-live-body.session-live-copy.is-generating {
+  background-image: none;
+  background: none;
+  text-shadow: none;
+}
+
 /* 概览卡顶部流光:与详情卡顶部流光重复,这里降为静态条 */
 .session-overview-card.is-live::after {
   animation: none;

@@ -2,9 +2,9 @@
 // 日志缓存管理
 // ============================================================================
 
-import { state } from "../state.js?v=20260627-calm3";
-import { TRACE_ANALYSIS_ENTRY_LIMIT } from "../config.js?v=20260627-calm3";
-import { stableKeyText } from "../utils/dom.js?v=20260627-calm3";
+import { state } from "../state.js?v=20260627-calm4";
+import { TRACE_ANALYSIS_ENTRY_LIMIT } from "../config.js?v=20260627-calm4";
+import { stableKeyText } from "../utils/dom.js?v=20260627-calm4";
 
 export function collectLogFiles() {
   const data = state.logs || {};

@@ -2,8 +2,8 @@
 // 组件 - 仪表盘
 // ============================================================================
 
-import { formatPercent, usageKind } from "../utils/format.js?v=20260627-calm3";
-import { animateFillWidth } from "../utils/motion.js?v=20260627-calm3";
+import { formatPercent, usageKind } from "../utils/format.js?v=20260627-calm4";
+import { animateFillWidth } from "../utils/motion.js?v=20260627-calm4";
 
 /**
  * 渲染资源使用率仪表盘

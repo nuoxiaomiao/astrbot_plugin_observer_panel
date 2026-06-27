@@ -2,9 +2,9 @@
 // 组件 - 事件列表
 // ============================================================================
 
-import { state } from "../state.js?v=20260627-calm3";
-import { IMPORTANT_EVENT_TYPES } from "../config.js?v=20260627-calm3";
-import { formatTime, formatCompactLogTime } from "../utils/format.js?v=20260627-calm3";
+import { state } from "../state.js?v=20260627-calm4";
+import { IMPORTANT_EVENT_TYPES } from "../config.js?v=20260627-calm4";
+import { formatTime, formatCompactLogTime } from "../utils/format.js?v=20260627-calm4";
 import {
   $,
   setText,
@@ -18,7 +18,7 @@ import {
   pruneOpenDetails,
   eventChainDetailKey,
   clippedText,
-} from "../utils/dom.js?v=20260627-calm3";
+} from "../utils/dom.js?v=20260627-calm4";
 import {
   eventTypeLabel,
   eventTypeBadge,
@@ -26,8 +26,8 @@ import {
   confidenceLabel,
   eventDurationLabel,
   evidenceDetailKey,
-} from "../log/analytics.js?v=20260627-calm3";
-import { focusLogEntry } from "./log-list.js?v=20260627-calm3";
+} from "../log/analytics.js?v=20260627-calm4";
+import { focusLogEntry } from "./log-list.js?v=20260627-calm4";
 
 let renderLogsRef = () => {};
 

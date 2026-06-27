@@ -2,13 +2,13 @@
 // 视图 - AstrBot
 // ============================================================================
 
-import { state } from "../state.js?v=20260627-calm3";
-import { MODULE_CHART_LIMIT } from "../config.js?v=20260627-calm3";
+import { state } from "../state.js?v=20260627-calm4";
+import { MODULE_CHART_LIMIT } from "../config.js?v=20260627-calm4";
 import {
   formatTime,
   formatNumber,
   formatCompactLogTime,
-} from "../utils/format.js?v=20260627-calm3";
+} from "../utils/format.js?v=20260627-calm4";
 import {
   $,
   setText,
@@ -16,16 +16,16 @@ import {
   privacyText,
   renderSignature,
   badge,
-} from "../utils/dom.js?v=20260627-calm3";
-import { compactJson, compactText } from "../utils/log-text.js?v=20260627-calm3";
-import { renderBarChart } from "../components/chart.js?v=20260627-calm3";
+} from "../utils/dom.js?v=20260627-calm4";
+import { compactJson, compactText } from "../utils/log-text.js?v=20260627-calm4";
+import { renderBarChart } from "../components/chart.js?v=20260627-calm4";
 import {
   countBy,
   aggregateModuleGroups,
   eventTypeLabel,
   eventTypeClass,
   sessionSourceLabel,
-} from "../log/analytics.js?v=20260627-calm3";
+} from "../log/analytics.js?v=20260627-calm4";
 
 export function functionCard(title, value, meta, kind = "") {
   const item = document.createElement("article");
