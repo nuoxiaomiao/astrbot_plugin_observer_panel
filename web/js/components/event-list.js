@@ -39,7 +39,6 @@ function eventListSignature(events, limit) {
   return [
     "events",
     state.privacyMode,
-    state.selectedEventId,
     limit,
     events.map((event) => [
       event.id,
@@ -83,6 +82,7 @@ export function renderEventList(id, events, limit = 40) {
     const item = document.createElement("article");
     item.className = `event-item ${eventTypeClass(event.type)}`;
     if (allowChain) {
+      item.dataset.eventId = event.id;
       item.classList.add("selectable");
       if (state.selectedEventId && event.id === state.selectedEventId) {
         item.classList.add("selected");
@@ -136,8 +136,14 @@ export function selectedImportantEvent() {
 
 export function selectImportantEvent(eventId) {
   state.selectedEventId = eventId || "";
+  // 仅就地切换高亮，避免重建列表 DOM 触发整列入场动画重播
+  const list = $("importantEventList");
+  if (list) {
+    list.querySelectorAll(".event-item").forEach((el) => {
+      el.classList.toggle("selected", !!state.selectedEventId && el.dataset.eventId === state.selectedEventId);
+    });
+  }
   renderDetailPanel();
-  renderLogsRef();
 }
 
 export function renderDetailPanel() {
@@ -155,7 +161,7 @@ export function renderDetailPanel() {
     const strong = document.createElement("strong");
     strong.textContent = "选择事件查看证据";
     const span = document.createElement("span");
-    span.textContent = "点击重要信息后，这里会显示判定规则、来源行号、原始日志和会话链路。";
+    span.textContent = "点击重要信息后，这里会显示判定规则、来源行号和原始日志。";
     empty.append(strong, span);
     body.appendChild(empty);
     return;
@@ -207,9 +213,6 @@ export function renderDetailPanel() {
     }
     body.appendChild(evidenceSection);
   }
-
-  const chain = renderDetailEventChain(event);
-  if (chain) body.appendChild(chain);
 }
 
 export function getSessionChainEvents(event) {
