@@ -55,10 +55,10 @@
 }
 
 .event-item.selected {
-  border-color: var(--line-strong);
-  border-left-color: var(--info-bright);
-  background: rgba(76, 154, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(76, 154, 255, 0.12);
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+  background: rgba(230, 25, 25, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(230, 25, 25, 0.18);
 }
 
 .event-select-hint {
@@ -216,9 +216,9 @@
 }
 
 .event-chain-row {
-  border-left: 3px solid var(--line);
-  border-radius: var(--radius);
-  background: rgba(13, 17, 23, 0.55);
+  border-left: 3px solid var(--line-strong);
+  border-radius: 0;
+  background: #000000;
   padding: 8px 10px;
   display: grid;
   grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);

@@ -20,7 +20,7 @@
 .log-mode-dot {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--muted);
 }
 

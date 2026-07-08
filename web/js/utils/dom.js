@@ -2,7 +2,7 @@
 // 工具函数 - DOM 操作 / UI 辅助
 // ============================================================================
 
-import { state } from "../state.js?v=20260627-calm4";
+import { state } from "../state.js?v=20260708-telemetry1";
 import {
   DEFAULT_RUNNING_TIMEOUT_MS,
   DEFAULT_SLOW_SESSION_MS,
@@ -10,8 +10,8 @@ import {
   DEFAULT_IMPORTANT_EVENT_LIMIT,
   DEFAULT_LOG_PAGE_SIZE,
   DEFAULT_RAW_CLIP_LENGTH,
-} from "../config.js?v=20260627-calm4";
-import { formatCompactLogTime, clampNumber, boolValue } from "./format.js?v=20260627-calm4";
+} from "../config.js?v=20260708-telemetry1";
+import { formatCompactLogTime, clampNumber, boolValue } from "./format.js?v=20260708-telemetry1";
 
 export function $(id) {
   return document.getElementById(id);
@@ -419,22 +419,22 @@ export function emptyBlock(text) {
 export function emptyState(type = "default") {
   const messages = {
     logs: {
-      icon: "📭",
+      icon: "[ // ]",
       title: "没有匹配的日志",
       hint: "尝试调整时间范围、搜索条件或刷新数据"
     },
     events: {
-      icon: "✨",
+      icon: "[ -- ]",
       title: "没有检测到重要事件",
       hint: "系统运行正常，或尝试刷新查看最新数据"
     },
     sessions: {
-      icon: "💬",
+      icon: "[ >< ]",
       title: "暂无会话数据",
       hint: "等待新的对话会话创建"
     },
     default: {
-      icon: "📦",
+      icon: "[ .. ]",
       title: "暂无数据",
       hint: "刷新页面以查看最新内容"
     }

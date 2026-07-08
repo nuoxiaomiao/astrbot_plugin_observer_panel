@@ -2,9 +2,9 @@
 // 组件 - 日志流
 // ============================================================================
 
-import { state } from "../state.js?v=20260627-calm4";
-import { LEVELS } from "../config.js?v=20260627-calm4";
-import { formatCompactLogTime } from "../utils/format.js?v=20260627-calm4";
+import { state } from "../state.js?v=20260708-telemetry1";
+import { LEVELS } from "../config.js?v=20260708-telemetry1";
+import { formatCompactLogTime } from "../utils/format.js?v=20260708-telemetry1";
 import {
   $,
   setText,
@@ -21,9 +21,9 @@ import {
   renderSignature,
   renderRawLogBlock,
   hydrateRawLogBlock,
-} from "../utils/dom.js?v=20260627-calm4";
-import { compactText } from "../utils/log-text.js?v=20260627-calm4";
-import { buildLogTextMatcher, cachedNormalizeModuleGroup } from "../log/analytics.js?v=20260627-calm4";
+} from "../utils/dom.js?v=20260708-telemetry1";
+import { compactText } from "../utils/log-text.js?v=20260708-telemetry1";
+import { buildLogTextMatcher, cachedNormalizeModuleGroup } from "../log/analytics.js?v=20260708-telemetry1";
 
 let selectTabRef = () => {};
 let syncDetailVisibilityRef = () => {};

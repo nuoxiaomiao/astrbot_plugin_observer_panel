@@ -7,17 +7,17 @@
 .resource-card,
 .stack-item {
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   background: var(--surface-2);
   min-width: 0;
   transition: var(--transition);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .resource-card:hover,
 .stack-item:hover {
-  border-color: var(--line-strong);
-  box-shadow: var(--shadow-md);
+  border-color: var(--accent);
+  box-shadow: none;
 }
 
 .resource-card {
@@ -55,48 +55,49 @@
 
 .usage-track {
   height: 8px;
-  border-radius: 999px;
-  background: var(--bg);
+  border-radius: 0;
+  background: #000000;
   overflow: hidden;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
+  border: 1px solid var(--line);
 }
 
 .usage-fill {
   height: 100%;
   min-width: 2px;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent-dim) 0%, var(--accent-bright) 100%);
-  box-shadow: 0 0 8px rgba(48, 164, 108, 0.4);
+  border-radius: 0;
+  background: var(--provider);
+  box-shadow: none;
   position: relative;
-  transition: width 0.55s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .usage-fill:hover {
-  box-shadow: 0 0 12px rgba(48, 164, 108, 0.6);
+  box-shadow: none;
 }
 
 .resource-card.warn .usage-fill,
 .stack-item.warn .usage-fill {
-  background: linear-gradient(90deg, #a67c1a 0%, var(--warn-bright) 100%);
-  box-shadow: 0 0 8px rgba(210, 153, 34, 0.4);
+  background: var(--warn-bright);
+  box-shadow: none;
 }
 
 .resource-card.bad .usage-fill,
 .stack-item.bad .usage-fill {
-  background: linear-gradient(90deg, #c9302c 0%, var(--danger-bright) 100%);
-  box-shadow: 0 0 8px rgba(248, 81, 73, 0.5);
+  background: var(--danger-bright);
+  box-shadow: none;
 }
 
 .usage-fill.ok {
-  background: linear-gradient(90deg, var(--accent-dim) 0%, var(--accent-bright) 100%);
+  background: var(--provider);
 }
 
 .usage-fill.warn {
-  background: linear-gradient(90deg, #a67c1a 0%, var(--warn-bright) 100%);
+  background: var(--warn-bright);
 }
 
 .usage-fill.debug {
-  background: linear-gradient(90deg, #6e40c9 0%, var(--debug-bright) 100%);
+  background: var(--debug-bright);
 }
 .stack-list {
   padding: 10px;
@@ -187,29 +188,20 @@
 
 .bar-track {
   height: 12px;
-  border-radius: 999px;
-  background: #101417;
+  border-radius: 0;
+  background: #000000;
   overflow: hidden;
+  border: 1px solid var(--line);
 }
 
 .bar-fill {
   height: 100%;
   min-width: 2px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--info);
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
-}
-
-.bar-fill::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.2) 50%, transparent 100%);
 }
 
 .bar-fill.level-error {
@@ -274,37 +266,37 @@
   transform: scaleY(1.05);
   filter: brightness(1.2);
 }
-/* ==================== 状态指示器渐变 ==================== */
+/* ==================== 状态指示器（遥测实色，去渐变去辉光）==================== */
 .level-error .bar-fill,
 .usage-fill[data-kind="bad"] {
-  background: linear-gradient(90deg, var(--danger) 0%, var(--danger-bright) 100%);
-  box-shadow: 0 0 8px rgba(248, 81, 73, 0.4);
+  background: var(--danger-bright);
+  box-shadow: none;
 }
 
 .level-warn .bar-fill,
 .usage-fill[data-kind="warn"] {
-  background: linear-gradient(90deg, var(--warn) 0%, var(--warn-bright) 100%);
-  box-shadow: 0 0 8px rgba(210, 153, 34, 0.4);
+  background: var(--warn-bright);
+  box-shadow: none;
 }
 
 .level-info .bar-fill {
-  background: linear-gradient(90deg, var(--info) 0%, var(--info-bright) 100%);
-  box-shadow: 0 0 8px rgba(76, 154, 255, 0.4);
+  background: var(--info-bright);
+  box-shadow: none;
 }
 
 
 .bar-fill.is-entering,
 .usage-fill.is-entering {
-  box-shadow: 0 0 10px rgba(76, 154, 255, 0.35);
+  box-shadow: none;
 }
 
 .bar-fill.is-pulse,
 .usage-fill.is-pulse {
-  animation: barPulse 0.55s var(--ease-out);
+  animation: barPulse 0.5s var(--ease-out);
 }
 
 @keyframes barPulse {
   0% { filter: brightness(1); }
-  45% { filter: brightness(1.35); }
+  45% { filter: brightness(1.5); }
   100% { filter: brightness(1); }
 }

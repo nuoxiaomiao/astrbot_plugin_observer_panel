@@ -14,9 +14,31 @@ body {
   color: var(--text);
   font-family: var(--sans);
   letter-spacing: 0;
-  line-height: 1.6;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ==================== CRT 扫描线叠层（战术遥测）==================== */
+/* 极低不透明度、静态、pointer-events:none，不影响交互与可读性；动画关闭时隐藏 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0) 0,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.05) 2px,
+    rgba(0, 0, 0, 0.05) 3px
+  );
+  mix-blend-mode: multiply;
+}
+
+body.anim-off::before {
+  display: none;
 }
 
 /* ==================== Custom Scrollbar ==================== */
@@ -31,7 +53,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: var(--line-strong);
-  border-radius: 4px;
+  border-radius: 0;
   border: 2px solid transparent;
   background-clip: content-box;
 }
@@ -52,38 +74,40 @@ input {
 /* ==================== Touch-Friendly Button Styles ==================== */
 button {
   min-height: 34px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
   background: var(--surface-2);
   color: var(--text);
   padding: 0 12px;
   cursor: pointer;
+  font-family: var(--mono);
   font-weight: 500;
-  font-size: 13px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   white-space: nowrap;
   position: relative;
   overflow: hidden;
-  transition: all var(--duration-fast) var(--ease-out);
-  box-shadow: var(--shadow-sm);
+  transition: background var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 button:hover {
-  border-color: var(--line-strong);
+  border-color: var(--accent);
   background: var(--surface-3);
-  box-shadow: var(--shadow-md);
+  color: var(--text-bright);
 }
 
 button:active {
   background: var(--surface-hover);
-  box-shadow: var(--shadow-active);
-  transition: all var(--duration-fast) var(--ease-out);
 }
 
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  opacity: 0.4;
   transform: none;
 }
 
@@ -103,21 +127,23 @@ summary:focus-visible,
 
 input[type="search"] {
   min-height: 36px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
   background: var(--surface);
   color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
   padding: 0 12px;
   outline: none;
   min-width: 0;
   transition: var(--transition);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
+  box-shadow: none;
 }
 
 input[type="search"]:focus {
-  border-color: var(--info);
+  border-color: var(--accent);
   background: var(--surface-2);
-  box-shadow: 0 0 0 3px rgba(68, 147, 248, 0.15), inset 0 1px 2px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 0 0 2px rgba(230, 25, 25, 0.25);
 }
 
 input[type="search"]::placeholder {
@@ -437,9 +463,12 @@ button.spinning::before {
 }
 
 .empty-icon {
-  font-size: 48px;
+  font-family: var(--mono);
+  font-size: 28px;
+  letter-spacing: 0.1em;
   line-height: 1;
-  opacity: 0.7;
+  color: var(--accent);
+  opacity: 0.75;
   animation: fadeIn 0.5s ease-out;
 }
 

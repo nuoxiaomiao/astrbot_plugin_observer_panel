@@ -49,7 +49,7 @@
   padding: 0 10px;
   font-size: 12px;
   font-weight: 500;
-  border-radius: 999px;
+  border-radius: 0;
 }
 
 .regex-toggle.active {
@@ -79,19 +79,20 @@
 
 .log-custom-time input[type="datetime-local"] {
   min-height: 36px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
   background: var(--surface);
   color: var(--text);
+  font-family: var(--mono);
   padding: 0 8px;
   font-size: 12px;
   transition: var(--transition);
 }
 
 .log-custom-time input[type="datetime-local"]:focus {
-  border-color: var(--info);
+  border-color: var(--accent);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(68, 147, 248, 0.15);
+  box-shadow: 0 0 0 2px rgba(230, 25, 25, 0.25);
 }
 
 /* 搜索关键词高亮 */
@@ -247,19 +248,19 @@ mark {
 
 @keyframes highlightPulse {
   0% {
-    outline: 2px solid rgba(68, 147, 248, 0);
+    outline: 2px solid rgba(230, 25, 25, 0);
     outline-offset: 0;
-    background: rgba(68, 147, 248, 0);
+    background: rgba(230, 25, 25, 0);
   }
   20% {
-    outline: 2px solid rgba(68, 147, 248, 0.8);
+    outline: 2px solid rgba(230, 25, 25, 0.85);
     outline-offset: -2px;
-    background: rgba(68, 147, 248, 0.16);
+    background: rgba(230, 25, 25, 0.16);
   }
   100% {
-    outline: 2px solid rgba(68, 147, 248, 0);
+    outline: 2px solid rgba(230, 25, 25, 0);
     outline-offset: -2px;
-    background: rgba(68, 147, 248, 0);
+    background: rgba(230, 25, 25, 0);
   }
 }
 
@@ -280,7 +281,7 @@ mark {
   align-items: center;
   min-height: 24px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--surface-2);
   padding: 0 10px;
   font-size: 11px;
@@ -386,7 +387,7 @@ mark {
   min-height: 20px;
   padding: 0 7px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 0;
   color: var(--muted);
   font-size: 11px;
   line-height: 1;

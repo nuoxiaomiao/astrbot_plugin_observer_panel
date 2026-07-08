@@ -2,19 +2,19 @@
 // 入口文件
 // ============================================================================
 
-console.log("[ObserverPanel] main.js loaded, build 20260627-calm4");
+console.log("[ObserverPanel] main.js loaded, build 20260708-telemetry1");
 
-import { state } from "./state.js?v=20260627-calm4";
-import { fetchJson, logsApiPath, fetchQueue } from "./api.js?v=20260627-calm4";
-import { applyPublicConfig, renderWorkspaceChrome, toast, $ } from "./utils/dom.js?v=20260627-calm4";
-import { renderSummary } from "./views/overview.js?v=20260627-calm4";
-import { renderSystem } from "./views/system.js?v=20260627-calm4";
-import { renderAstrBot } from "./views/astrbot.js?v=20260627-calm4";
-import { renderLogs } from "./views/logs.js?v=20260627-calm4";
-import { bindUI, promptNotificationPermission, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode, addLoadingState, removeLoadingState } from "./ui.js?v=20260627-calm4";
-import { initEventListActions } from "./components/event-list.js?v=20260627-calm4";
-import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260627-calm4";
-import { transitionViews } from "./utils/motion.js?v=20260627-calm4";
+import { state } from "./state.js?v=20260708-telemetry1";
+import { fetchJson, logsApiPath, fetchQueue } from "./api.js?v=20260708-telemetry1";
+import { applyPublicConfig, renderWorkspaceChrome, toast, $ } from "./utils/dom.js?v=20260708-telemetry1";
+import { renderSummary } from "./views/overview.js?v=20260708-telemetry1";
+import { renderSystem } from "./views/system.js?v=20260708-telemetry1";
+import { renderAstrBot } from "./views/astrbot.js?v=20260708-telemetry1";
+import { renderLogs } from "./views/logs.js?v=20260708-telemetry1";
+import { bindUI, promptNotificationPermission, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode, addLoadingState, removeLoadingState } from "./ui.js?v=20260708-telemetry1";
+import { initEventListActions } from "./components/event-list.js?v=20260708-telemetry1";
+import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260708-telemetry1";
+import { transitionViews } from "./utils/motion.js?v=20260708-telemetry1";
 
 const FAST_LOG_REFRESH_MS = 1000;
 
@@ -419,7 +419,7 @@ function toggleAnimLevel() {
   document.body.classList.add(`anim-${level}`);
 
   const btn = $('animToggle');
-  const labels = { full: '✨ 完整', medium: '⚡ 适中', off: '🚫 关闭' };
+  const labels = { full: '[ MOT·3 ]', medium: '[ MOT·1 ]', off: '[ MOT·0 ]' };
   btn.textContent = labels[level];
   btn.setAttribute('aria-pressed', animLevel > 0);
   try { localStorage.setItem('observer_anim_level', level); } catch {}

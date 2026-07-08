@@ -84,18 +84,21 @@
 }
 
 .function-card.ok {
-  border-color: rgba(63, 185, 80, 0.35);
-  background: linear-gradient(135deg, rgba(63, 185, 80, 0.06) 0%, transparent 100%);
+  border-color: var(--provider);
+  background: var(--surface-2);
+  border-left: 3px solid var(--provider);
 }
 
 .function-card.warn {
-  border-color: rgba(210, 153, 34, 0.35);
-  background: linear-gradient(135deg, rgba(210, 153, 34, 0.06) 0%, transparent 100%);
+  border-color: var(--warn);
+  background: var(--surface-2);
+  border-left: 3px solid var(--warn);
 }
 
 .function-card.bad {
-  border-color: rgba(248, 81, 73, 0.35);
-  background: linear-gradient(135deg, rgba(248, 81, 73, 0.06) 0%, transparent 100%);
+  border-color: var(--danger);
+  background: var(--surface-2);
+  border-left: 3px solid var(--danger);
 }
 
 .state-viz {
@@ -110,7 +113,7 @@
 .plugin-donut {
   width: 132px;
   aspect-ratio: 1;
-  border-radius: 50%;
+  border-radius: 0;
   display: grid;
   place-items: center;
   box-shadow: inset 0 0 0 1px var(--line), var(--shadow-sm);
@@ -119,7 +122,7 @@
 .plugin-donut-center {
   width: 88px;
   aspect-ratio: 1;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--surface);
   display: grid;
   place-items: center;
@@ -165,15 +168,15 @@
 }
 
 .usage-fill.ok {
-  background: linear-gradient(90deg, var(--accent-dim) 0%, var(--accent-bright) 100%);
+  background: var(--provider);
 }
 
 .usage-fill.warn {
-  background: linear-gradient(90deg, #a67c1a 0%, var(--warn-bright) 100%);
+  background: var(--warn-bright);
 }
 
 .usage-fill.debug {
-  background: linear-gradient(90deg, #6e40c9 0%, var(--debug-bright) 100%);
+  background: var(--debug-bright);
 }
 
 .compact-chart {

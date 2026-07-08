@@ -1,46 +1,68 @@
+/* ==========================================================================
+   浅色主题 —— Swiss Industrial Print（瑞士工业印刷）
+   风格：industrial-brutalist-ui · Swiss Industrial Print 模式
+   - 未漂白文档纸底、碳墨字、危险红强调、实色发丝线、全直角
+   - 与暗色 Tactical Telemetry 为两套内部自洽的 substrate，切换即整体换态
+   ========================================================================== */
 [data-theme="light"] {
   color-scheme: light;
-  --bg: #f4f6f8;
-  --surface: #ffffff;
-  --surface-2: #f5f7fa;
-  --surface-3: #eef1f5;
-  --surface-hover: #f0f3f7;
-  --line: rgba(31, 35, 40, 0.08);
-  --line-strong: rgba(31, 35, 40, 0.14);
-  --text: #1f2328;
-  --text-bright: #0d1117;
-  --muted: #59636e;
-  --muted-dark: #818b96;
-  --accent: #1a7f37;
-  --accent-bright: #1a7f37;
-  --accent-dim: #2da44e;
-  --info: #0969da;
-  --info-bright: #0969da;
+
+  /* 未漂白文档纸底 */
+  --bg: #eae8e3;
+  --surface: #f4f4f0;
+  --surface-2: #eeece6;
+  --surface-3: #e4e1da;
+  --surface-hover: #e8e5de;
+
+  /* 实色发丝线（碳墨） */
+  --line: #c9c5bc;
+  --line-strong: #050505;
+
+  /* 碳墨字 */
+  --text: #111111;
+  --text-bright: #050505;
+  --muted: #4a4a44;
+  --muted-dark: #6b6b63;
+
+  /* 危险红强调 */
+  --accent: #e61919;
+  --accent-bright: #cc1414;
+  --accent-dim: #e61919;
+
+  /* 语义色：印刷版遥测实色 */
+  --info: #1a5490;
+  --info-bright: #1a5490;
   --warn: #9a6700;
-  --warn-bright: #bf8700;
-  --danger: #cf222e;
-  --danger-bright: #cf222e;
-  --debug: #8250df;
-  --debug-bright: #8250df;
-  --memory: #8250df;
-  --memory-bright: #a371f7;
-  --waking: #0969da;
-  --waking-bright: #4c9aff;
-  --provider: #1a7f37;
-  --provider-bright: #2da44e;
-  --cleanup: #9a6700;
-  --cleanup-bright: #bf8700;
-  --success: #1a7f37;
-  --shadow-sm: 0 1px 2px rgba(31, 35, 40, 0.06);
-  --shadow-md: 0 4px 12px rgba(31, 35, 40, 0.1);
-  --shadow-lg: 0 12px 32px rgba(31, 35, 40, 0.14);
-  --shadow-subtle: 0 1px 3px rgba(31, 35, 40, 0.04), 0 1px 2px rgba(31, 35, 40, 0.06);
-  --shadow-card: 0 1px 4px rgba(31, 35, 40, 0.06), 0 2px 8px rgba(31, 35, 40, 0.05);
-  --shadow-hover: 0 6px 18px rgba(31, 35, 40, 0.1), 0 10px 28px rgba(31, 35, 40, 0.08);
-  --shadow-active: 0 1px 3px rgba(31, 35, 40, 0.1);
-  --gradient-subtle: linear-gradient(135deg, rgba(26, 127, 55, 0.05) 0%, rgba(9, 105, 218, 0.05) 100%);
-  --gradient-accent: linear-gradient(135deg, var(--accent-dim) 0%, var(--accent-bright) 100%);
-  --gradient-info: linear-gradient(135deg, var(--info) 0%, var(--info-bright) 100%);
+  --warn-bright: #7a5200;
+  --danger: #e61919;
+  --danger-bright: #cc1414;
+  --debug: #4a4a5a;
+  --debug-bright: #33333f;
+  --memory: #5a4a6a;
+  --memory-bright: #453855;
+  --waking: #1a5490;
+  --waking-bright: #1a5490;
+  --provider: #2f6b3a;
+  --provider-bright: #245530;
+  --cleanup: #9a5a1a;
+  --cleanup-bright: #7a4514;
+  --success: #2f6b3a;
+
+  --terminal-green: #2f6b3a;
+
+  /* 阴影：印刷无柔性投影 */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-subtle: none;
+  --shadow-card: none;
+  --shadow-hover: none;
+  --shadow-active: none;
+
+  /* 渐变：纯平色 */
+  --gradient-subtle: var(--surface-3);
+  --gradient-accent: var(--accent);
+  --gradient-info: var(--info);
 }
 
 [data-theme="light"] body {
@@ -48,36 +70,36 @@
 }
 
 [data-theme="light"] .shell {
-  background: #eef0f3;
+  background: #ddd9d1;
 }
 
 [data-theme="light"] .log-entry,
 [data-theme="light"] .code-block {
-  background: #f6f8fa;
+  background: #eeece6;
 }
 
 [data-theme="light"] .bar-track {
-  background: #e4e7ec;
+  background: #d8d4cb;
 }
 
 [data-theme="light"] .event-chain-row {
-  background: rgba(246, 248, 250, 0.7);
+  background: #eeece6;
 }
 
 [data-theme="light"] .usage-track {
-  background: #e4e7ec;
-  box-shadow: inset 0 1px 2px rgba(31, 35, 40, 0.08);
+  background: #d8d4cb;
+  box-shadow: none;
 }
 
 [data-theme="light"] .raw-log-block {
-  background: #f6f8fa;
+  background: #eeece6;
 }
 
 [data-theme="light"] .log-list {
-  background: #f6f8fa;
+  background: #eeece6;
 }
 
-
 [data-theme="light"] mark {
-  background: rgba(210, 153, 34, 0.35);
+  background: #ffe08a;
+  color: #050505;
 }

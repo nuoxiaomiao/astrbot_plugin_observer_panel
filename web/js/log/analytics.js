@@ -2,7 +2,7 @@
 // 日志分析与 trace 洞察
 // ============================================================================
 
-import { state } from "../state.js?v=20260627-calm4";
+import { state } from "../state.js?v=20260708-telemetry1";
 import {
   DEFAULT_SLOW_SESSION_MS,
   DEFAULT_SLOW_TOOL_MS,
@@ -12,17 +12,17 @@ import {
   PLUG_MODULE_LABELS,
   TRACE_ACTION_LABELS,
   EVENT_TYPES,
-} from "../config.js?v=20260627-calm4";
-import { average } from "../utils/format.js?v=20260627-calm4";
+} from "../config.js?v=20260708-telemetry1";
+import { average } from "../utils/format.js?v=20260708-telemetry1";
 import {
   compactText,
   compactJson,
   safeObject,
   bracketParts,
-} from "../utils/log-text.js?v=20260627-calm4";
-import { getLogSearchText, detailKey, stableKeyText } from "../utils/dom.js?v=20260627-calm4";
-import { buildLogEntries } from "./parser.js?v=20260627-calm4";
-import { logFilesSignature, recentAnalysisEntries } from "./cache.js?v=20260627-calm4";
+} from "../utils/log-text.js?v=20260708-telemetry1";
+import { getLogSearchText, detailKey, stableKeyText } from "../utils/dom.js?v=20260708-telemetry1";
+import { buildLogEntries } from "./parser.js?v=20260708-telemetry1";
+import { logFilesSignature, recentAnalysisEntries } from "./cache.js?v=20260708-telemetry1";
 
 const SPLIT_SESSION_MERGE_WINDOW_MS = 2 * 60 * 1000;
 

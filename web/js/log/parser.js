@@ -2,8 +2,8 @@
 // 日志解析
 // ============================================================================
 
-import { state } from "../state.js?v=20260627-calm4";
-import { LOG_TIMESTAMP_RE } from "../config.js?v=20260627-calm4";
+import { state } from "../state.js?v=20260708-telemetry1";
+import { LOG_TIMESTAMP_RE } from "../config.js?v=20260708-telemetry1";
 import {
   compactText,
   safeObject,
@@ -12,7 +12,7 @@ import {
   summarizeJsonLog,
   summarizePlainLog,
   bracketParts,
-} from "../utils/log-text.js?v=20260627-calm4";
+} from "../utils/log-text.js?v=20260708-telemetry1";
 
 /**
  * 从日志行文本解析毫秒级时间戳；解析失败时返回 null。

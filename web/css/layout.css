@@ -298,9 +298,14 @@ body.sidebar-collapsed .sidebar-collapse-btn {
 .brand-block h1 {
   margin: 0;
   color: var(--text-bright);
-  font-size: 18px;
+  font-family: var(--mono);
+  font-size: 16px;
   line-height: 1.2;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding-left: 10px;
+  border-left: 3px solid var(--accent);
 }
 
 .brand-block p {
@@ -442,9 +447,9 @@ body.compact .log-entry {
 .status-dot {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
-  background: var(--accent-bright);
-  box-shadow: 0 0 0 3px rgba(48, 164, 108, 0.14);
+  border-radius: 0;
+  background: var(--terminal-green);
+  box-shadow: 0 0 6px 1px rgba(74, 246, 38, 0.55);
   animation: breathe 2s ease-in-out infinite;
 }
 
@@ -464,7 +469,7 @@ body.compact .log-entry {
   min-height: 28px;
   padding: 0 10px;
   font-size: 12px;
-  border-radius: 999px;
+  border-radius: 0;
 }
 
 .topbar {
@@ -619,12 +624,11 @@ body.privacy-mode .log-entry-details {
     flex: 1;
   }
 }
-/* 标题渐变 */
+/* 标题：战术遥测字标（实色，无渐变文字填充） */
 .brand-block h1 {
-  background: var(--gradient-accent);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: var(--text-bright);
 }
 
 /* ★ 增量更新：防止重建时容器高度坍塌导致闪烁 */

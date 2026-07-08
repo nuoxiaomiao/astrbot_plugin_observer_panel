@@ -2,7 +2,7 @@
 // 组件 - 仪表盘（增量更新版）
 // ============================================================================
 
-import { formatPercent, usageKind } from "../utils/format.js?v=20260627-calm4";
+import { formatPercent, usageKind } from "../utils/format.js?v=20260708-telemetry1";
 
 /**
  * 渲染/更新资源使用率仪表盘（增量 DOM 复用）
