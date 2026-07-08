@@ -101,7 +101,9 @@
   --motion-live-slow: 2.4s;
   --motion-live-fast: 1.35s;
 
-  /* live conversation 动效（tier 2）—— 磷光/红，去柔光 */
+  /* live conversation 动效（tier 2）—— 机械遥测：进行中=钢青，生成中=琥珀 */
+  --live-running: var(--info);
+  --live-generating: var(--warn);
   --live-shimmer-running: 1.2s;
   --live-shimmer-generating: 0.75s;
   --live-progress-running: 1.1s;
