@@ -1,0 +1,249 @@
+.big-screen-panel,
+.overview-live-layout,
+.important-panel,
+.log-insight-layout,
+.runtime-stats-layout {
+  margin-bottom: 16px;
+}
+
+.big-screen-grid {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.astrbot-sections {
+  margin-bottom: 14px;
+}
+
+.astrbot-function-panel,
+.astrbot-visuals,
+.config-section-panel {
+  margin-bottom: 14px;
+}
+
+.function-grid {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.function-card,
+.config-tile {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  min-width: 0;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+
+.function-card {
+  padding: 14px;
+  min-height: 88px;
+  display: grid;
+  align-content: space-between;
+  gap: 8px;
+  contain: layout paint;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
+}
+
+.function-card:hover,
+.config-tile:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.function-card span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.function-card strong {
+  color: var(--text-bright);
+  font-size: 22px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.function-card small {
+  color: var(--muted-dark);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.function-card.ok {
+  border-color: rgba(63, 185, 80, 0.35);
+  background: linear-gradient(135deg, rgba(63, 185, 80, 0.06) 0%, transparent 100%);
+}
+
+.function-card.warn {
+  border-color: rgba(210, 153, 34, 0.35);
+  background: linear-gradient(135deg, rgba(210, 153, 34, 0.06) 0%, transparent 100%);
+}
+
+.function-card.bad {
+  border-color: rgba(248, 81, 73, 0.35);
+  background: linear-gradient(135deg, rgba(248, 81, 73, 0.06) 0%, transparent 100%);
+}
+
+.state-viz {
+  min-height: 260px;
+  padding: 18px 16px;
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.plugin-donut {
+  width: 132px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 1px var(--line), var(--shadow-sm);
+}
+
+.plugin-donut-center {
+  width: 88px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  border: 1px solid var(--line);
+}
+
+.plugin-donut-center strong {
+  color: var(--text-bright);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.plugin-donut-center span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.state-bars {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.state-row {
+  display: grid;
+  gap: 7px;
+}
+
+.state-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.state-row-head strong {
+  color: var(--text-bright);
+  font-size: 14px;
+}
+
+.usage-fill.ok {
+  background: linear-gradient(90deg, var(--accent-dim) 0%, var(--accent-bright) 100%);
+}
+
+.usage-fill.warn {
+  background: linear-gradient(90deg, #a67c1a 0%, var(--warn-bright) 100%);
+}
+
+.usage-fill.debug {
+  background: linear-gradient(90deg, #6e40c9 0%, var(--debug-bright) 100%);
+}
+
+.compact-chart {
+  min-height: 260px;
+}
+
+.astrbot-visuals .stack-list {
+  min-height: 260px;
+  max-height: 360px;
+}
+
+.astrbot-visuals .info-item .detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.config-grid {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  max-height: 440px;
+  overflow: auto;
+}
+
+.config-tile {
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.config-tile-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.config-tile-head strong {
+  color: var(--text-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-tile small,
+.config-tile p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.config-tile p {
+  margin: 0;
+}
+
+
+
+.function-card.animate-in,
+.resource-card.animate-in {
+  animation: fadeInUp var(--motion-enter-duration) var(--ease-out) both;
+}
+
+.function-card strong {
+  display: inline-block;
+  transition: transform var(--duration-normal) var(--ease-out), color var(--duration-normal) var(--ease-out);
+}
+
+.function-card:hover strong {
+  transform: scale(1.05);
+  color: var(--info-bright);
+}

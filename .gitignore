@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Node / frontend tooling (Playwright tests only; not a runtime dep)
+node_modules/
+package.json
+package-lock.json
+test_panel.js
+test_panel.py
+
+# Debug screenshots / image artifacts
+debug_*.png
+screenshot_*.png
+
+# IDE / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs (do not commit local runtime logs)
+*.log
+
+# Local env / secrets
+.env
+.env.local
+
+# Test artifacts
+.pytest_cache/
+.coverage
