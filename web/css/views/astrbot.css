@@ -31,7 +31,8 @@
   gap: 8px;
   max-height: 76vh;
   overflow: auto;
-  padding-right: 4px;
+  /* 上下留出缓冲，避免顶/底卡片 selected 发光被 overflow 裁切 */
+  padding: 4px 4px 4px 0;
 }
 
 /* ── Session Card ── */
@@ -162,10 +163,9 @@
 /* -------- 基础交互 -------- */
 
 .session-card:hover {
-  border-color: var(--line-strong);
+  border-color: var(--accent);
   background: var(--surface-3);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-hover);
+  box-shadow: none;
 }
 
 .session-card.is-new {
