@@ -2,7 +2,7 @@
 // 日志分析与 trace 洞察
 // ============================================================================
 
-import { state } from "../state.js?v=20260709-mobile1";
+import { state } from "../state.js?v=20260709-mobile2";
 import {
   DEFAULT_SLOW_SESSION_MS,
   DEFAULT_SLOW_TOOL_MS,
@@ -12,17 +12,17 @@ import {
   PLUG_MODULE_LABELS,
   TRACE_ACTION_LABELS,
   EVENT_TYPES,
-} from "../config.js?v=20260709-mobile1";
-import { average } from "../utils/format.js?v=20260709-mobile1";
+} from "../config.js?v=20260709-mobile2";
+import { average } from "../utils/format.js?v=20260709-mobile2";
 import {
   compactText,
   compactJson,
   safeObject,
   bracketParts,
-} from "../utils/log-text.js?v=20260709-mobile1";
-import { getLogSearchText, detailKey, stableKeyText } from "../utils/dom.js?v=20260709-mobile1";
-import { buildLogEntries } from "./parser.js?v=20260709-mobile1";
-import { logFilesSignature, recentAnalysisEntries } from "./cache.js?v=20260709-mobile1";
+} from "../utils/log-text.js?v=20260709-mobile2";
+import { getLogSearchText, detailKey, stableKeyText } from "../utils/dom.js?v=20260709-mobile2";
+import { buildLogEntries } from "./parser.js?v=20260709-mobile2";
+import { logFilesSignature, recentAnalysisEntries } from "./cache.js?v=20260709-mobile2";
 
 const SPLIT_SESSION_MERGE_WINDOW_MS = 2 * 60 * 1000;
 
@@ -78,7 +78,7 @@ export function filterLogEntries(entries) {
 
   return entries.filter((entry) => {
     if (state.logLevel !== "all" && entry.level !== state.logLevel) return false;
-    const entryTime = entry.timestamp || (entry.fileMtime ? entry.fileMtime * 1000 : 0);
+    const entryTime = entryTimeMs(entry);
     if (timeLimit) {
       if (entryTime && now - entryTime > timeLimit) return false;
     } else if (state.logTimeFilter === "custom" && (customFrom || customTo)) {
@@ -357,7 +357,7 @@ export function stableHash(text) {
 }
 
 export function eventKey(spanId, type, entry, suffix = "") {
-  const time = entry.timestamp || (entry.fileMtime ? entry.fileMtime * 1000 : 0);
+  const time = entryTimeMs(entry);
   const rawHash = stableHash(entry.raw || "");
   return `${spanId || "no-span"}:${type}:${time}:${rawHash}:${suffix}`;
 }
@@ -849,22 +849,123 @@ function textLooksSame(left, right) {
   return shorter.length >= 12 && longer.includes(shorter);
 }
 
-function extractPlainReasoningCandidate(entry) {
+/** 统一 entry 时间到毫秒：行内 timestamp 优先，否则 fileMtime(秒)×1000 */
+export function entryTimeMs(entry) {
+  const ts = Number(entry?.timestamp);
+  if (Number.isFinite(ts) && ts > 0) return ts;
+  const mtime = Number(entry?.fileMtime);
+  if (Number.isFinite(mtime) && mtime > 0) {
+    // fileMtime 来自后端 st_mtime（秒）；若已是 ms 量级则不再放大
+    return mtime > 1e12 ? mtime : mtime * 1000;
+  }
+  return 0;
+}
+
+/** 与 trace buildTraceInfo 对齐的思考字段别名 */
+const REASONING_FIELD_NAMES = [
+  "reasoning_content",
+  "reasoning",
+  "thinking",
+  "reason_content",
+  "reasoningContent",
+  "reasonContent",
+];
+
+const RESPONSE_FIELD_NAMES = ["content", "text", "resp", "response"];
+
+/**
+ * 从日志文本中解析 JSON 风格 "field": "..." 字符串值（支持简单转义）。
+ */
+function extractJsonStringField(text, fieldNames) {
+  const source = String(text || "");
+  for (const fieldName of fieldNames) {
+    const re = new RegExp(
+      `["']${fieldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']\\s*:\\s*("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')`,
+      "i",
+    );
+    const match = source.match(re);
+    if (!match) continue;
+    const quoted = match[1];
+    const inner = quoted.slice(1, -1);
+    const value = decodeReprString(inner).trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+/**
+ * 尝试从整段 raw 中找 JSON 对象并读取字段（trace 以外的嵌套 provider 日志）。
+ */
+function extractJsonObjectField(text, fieldNames) {
+  const source = String(text || "");
+  const start = source.indexOf("{");
+  if (start < 0) return "";
+  // 从首个 { 起尝试若干截断解析，避免全行非 JSON 时白跑
+  for (const end of [source.lastIndexOf("}"), source.length - 1]) {
+    if (end <= start) continue;
+    try {
+      const obj = JSON.parse(source.slice(start, end + 1));
+      if (!obj || typeof obj !== "object") continue;
+      const queue = [obj];
+      while (queue.length) {
+        const cur = queue.shift();
+        if (!cur || typeof cur !== "object") continue;
+        for (const name of fieldNames) {
+          const raw = cur[name];
+          if (typeof raw === "string" && raw.trim()) return raw.trim();
+        }
+        Object.values(cur).forEach((child) => {
+          if (child && typeof child === "object") queue.push(child);
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return "";
+}
+
+function extractTextField(raw, fieldNames) {
+  return extractReprField(raw, fieldNames)
+    || extractJsonStringField(raw, fieldNames)
+    || extractJsonObjectField(raw, fieldNames)
+    || "";
+}
+
+function looksLikeReasoningPayload(raw) {
+  const text = String(raw || "");
+  if (REASONING_FIELD_NAMES.some((name) => new RegExp(`${name}\\s*=`, "i").test(text))) return true;
+  if (REASONING_FIELD_NAMES.some((name) => new RegExp(`["']${name}["']\\s*:`, "i").test(text))) return true;
+  return false;
+}
+
+/**
+ * 从 plain 日志抽取思考候选。export 供 fixture 单测。
+ * @param {{ trace?: unknown, raw?: string, message?: string, id?: string, timestamp?: number, fileMtime?: number, moduleName?: string, summary?: string }} entry
+ */
+export function extractPlainReasoningCandidate(entry) {
   if (!entry || entry.trace) return null;
   const raw = String(entry.raw || entry.message || "");
-  if (!/reasoning_content\s*=/.test(raw)) return null;
-  if (!isPlainProviderResponseLog(entry) && !/\b(?:ChatCompletion|LLMResponse)\(/i.test(raw)) return null;
-  const reasoningContent = extractReprField(raw, ["reasoning_content"]);
+  if (!looksLikeReasoningPayload(raw)) return null;
+
+  const reasoningContent = extractTextField(raw, REASONING_FIELD_NAMES);
   if (!String(reasoningContent || "").trim()) return null;
+
+  // 非空思考仍要求 provider / ChatCompletion 上下文，避免任意日志误抽
+  const providerLike = isPlainProviderResponseLog(entry) || /\b(?:ChatCompletion|LLMResponse)\(/i.test(raw);
+  if (!providerLike) return null;
+
   return {
     entry,
     logEntryId: entry.id || "",
-    timestamp: entry.timestamp || (entry.fileMtime ? entry.fileMtime * 1000 : 0),
+    timestamp: entryTimeMs(entry),
     reasoningContent,
-    responseText: extractReprField(raw, ["content", "text"]),
+    responseText: extractTextField(raw, RESPONSE_FIELD_NAMES),
     completionId: extractCompletionId(raw),
     reasoningTokens: extractReasoningTokenCount(raw),
-    kind: /completion:\s*ChatCompletion/i.test(raw) ? "completion" : (/\bLLMResponse\(/i.test(raw) ? "llm-response" : "provider"),
+    kind: /completion:\s*ChatCompletion/i.test(raw)
+      ? "completion"
+      : (/\bLLMResponse\(/i.test(raw) ? "llm-response" : "provider"),
   };
 }
 
@@ -879,6 +980,49 @@ function candidateSortForSession(referenceTs) {
       || String(a.completionId || "").localeCompare(String(b.completionId || ""))
       || String(a.logEntryId || "").localeCompare(String(b.logEntryId || ""));
   };
+}
+
+/**
+ * 多候选时：response 匹配优先；否则取时间最近（completion 优先）。
+ * 无 session.response 时提高弃绑门槛，降低并发 empty 会话错挂。
+ * 若最近两条时间差 < 2s 且思考正文不同，放弃以免错挂。
+ */
+function selectReasoningCandidate(windowCandidates, session, referenceTs) {
+  if (!windowCandidates.length) return null;
+  const hasResponse = Boolean(String(session.response || "").trim());
+  const responseMatches = hasResponse
+    ? windowCandidates.filter((candidate) => textLooksSame(session.response, candidate.responseText))
+    : [];
+  if (responseMatches.length) {
+    return responseMatches.sort(candidateSortForSession(referenceTs))[0];
+  }
+  const sorted = [...windowCandidates].sort(candidateSortForSession(referenceTs));
+  if (sorted.length === 1) return sorted[0];
+
+  // 无正文可匹配时：多候选默认不猜；除非最近两条时间分离足够大
+  if (!hasResponse) {
+    const best = sorted[0];
+    const second = sorted[1];
+    const bestDelta = Math.abs((best.timestamp || 0) - referenceTs);
+    const secondDelta = Math.abs((second.timestamp || 0) - referenceTs);
+    if (Math.abs(bestDelta - secondDelta) < 5000) return null;
+    if (best.reasoningContent !== second.reasoningContent && Math.abs(bestDelta - secondDelta) < 8000) {
+      return null;
+    }
+    return best;
+  }
+
+  const best = sorted[0];
+  const second = sorted[1];
+  const bestDelta = Math.abs((best.timestamp || 0) - referenceTs);
+  const secondDelta = Math.abs((second.timestamp || 0) - referenceTs);
+  if (
+    Math.abs(bestDelta - secondDelta) < 2000
+    && best.reasoningContent !== second.reasoningContent
+  ) {
+    return null;
+  }
+  return best;
 }
 
 const PLAIN_MESSAGE_CLEANUP_PATTERNS = [
@@ -1362,6 +1506,9 @@ export function buildTraceInsights(entries) {
   function attachPlainReasoningToSessions() {
     if (!plainReasoningCandidates.length) return;
     const usedLogEntries = new Set();
+    // 前 60s / 后 30s：覆盖落盘延迟与慢生成；多候选时用 selectReasoningCandidate 而非「必须唯一」
+    const windowBeforeMs = 60 * 1000;
+    const windowAfterMs = 30 * 1000;
     const completed = [...sessions.values()]
       .filter((session) => !session.reasoningContent && session.status === "complete")
       .sort((a, b) => (a.lastTs || 0) - (b.lastTs || 0));
@@ -1373,21 +1520,11 @@ export function buildTraceInsights(entries) {
         if (!candidate.logEntryId || usedLogEntries.has(candidate.logEntryId)) return false;
         const ts = candidate.timestamp || 0;
         if (!ts) return false;
-        return ts >= referenceTs - 45 * 1000 && ts <= referenceTs + 10 * 1000;
+        return ts >= referenceTs - windowBeforeMs && ts <= referenceTs + windowAfterMs;
       });
       if (!windowCandidates.length) return;
 
-      const responseMatches = session.response
-        ? windowCandidates.filter((candidate) => textLooksSame(session.response, candidate.responseText))
-        : [];
-      const selected = responseMatches.length
-        ? responseMatches.sort(candidateSortForSession(referenceTs))[0]
-        : (() => {
-            const tight = windowCandidates.filter((candidate) => Math.abs((candidate.timestamp || 0) - referenceTs) <= 12 * 1000);
-            if (tight.length === 1) return tight[0];
-            if (windowCandidates.length === 1) return windowCandidates[0];
-            return null;
-          })();
+      const selected = selectReasoningCandidate(windowCandidates, session, referenceTs);
       if (!selected) return;
       assignReasoningFromCandidate(session, selected);
       plainReasoningCandidates.forEach((candidate) => {

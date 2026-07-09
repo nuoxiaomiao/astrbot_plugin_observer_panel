@@ -242,6 +242,40 @@ def _redact(value: Any) -> Any:
     return value
 
 
+def _privacy_mask_log_line(line: str) -> str:
+    """privacy_mode 下对 API 返回的日志正文做服务端遮罩，仅保留时间头与级别线索。"""
+    text = str(line or "")
+    if not text.strip():
+        return text
+    timestamped = re.match(r"^(\[\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?\])\s*(.*)$", text)
+    prefix = ""
+    body = text
+    if timestamped:
+        prefix = f"{timestamped.group(1)} "
+        body = timestamped.group(2)
+    level = _parse_log_level(text)
+    level_tag = f"[{level.upper()}] " if level and level != "other" else ""
+    return f"{prefix}{level_tag}[隐私模式已隐藏日志正文]"
+
+
+def _apply_privacy_to_log_payload(data: dict[str, Any], *, privacy: bool) -> dict[str, Any]:
+    if not privacy or not isinstance(data, dict):
+        return data
+    copied = dict(data)
+    lines = copied.get("lines")
+    if isinstance(lines, list):
+        copied["lines"] = [_privacy_mask_log_line(str(line)) for line in lines]
+    return copied
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 def _config_type_label(value: Any) -> str:
     if isinstance(value, dict):
         return "对象"
@@ -1391,8 +1425,10 @@ class ObserverPanelPlugin(Star):
             "stale_log_minutes": self._threshold_int("stale_log_minutes", DEFAULT_THRESHOLDS["stale_log_minutes"], 1, 1440),
         }
 
-        if self._cfg_str("host", "127.0.0.1") == "0.0.0.0" and not self._cfg_str("access_token", "").strip():
+        if self._host_all_interfaces() and not self._cfg_str("access_token", "").strip():
             add("warn", "远程 API 需要访问令牌", "当前监听所有网卡且 access_token 为空，远程 API 请求会被拒绝。", "security")
+        elif not self._cfg_str("access_token", "").strip():
+            add("info", "未配置访问令牌", "当前仅依赖绑定地址保护面板，同机其他进程/用户仍可能访问。", "security")
 
         platforms = astrbot.get("platforms") or {}
         if int(platforms.get("total") or 0) <= 0:
@@ -1551,7 +1587,7 @@ class ObserverPanelPlugin(Star):
             cwd = str(Path("/proc/self/cwd").resolve())
         except OSError:
             cwd = ""
-        result["cmdline"] = cmdline
+        result["cmdline"] = str(_redact(cmdline))
         result["cwd"] = cwd
         result["open_fds"] = fd_count
         return result
@@ -1585,6 +1621,7 @@ class ObserverPanelPlugin(Star):
         max_lines = self._astrbot_cfg_int("tail_lines", 300, 1, 3000)
         max_bytes = self._astrbot_cfg_int("tail_bytes", 262144, 4096, 4 * 1024 * 1024)
         redact = self._security_cfg_bool("redact_secrets", True)
+        privacy = self._ui_cfg_bool("privacy_mode", DEFAULT_UI["privacy_mode"])
         paths = self._astrbot_log_paths()
         if cursor:
             tasks = [
@@ -1603,16 +1640,30 @@ class ObserverPanelPlugin(Star):
                 self._tail_log_file_cached(path, max_bytes=max_bytes, max_lines=max_lines, redact=redact)
                 for path in paths
             ]
-        return await asyncio.gather(*tasks) if tasks else []
+        results = await asyncio.gather(*tasks) if tasks else []
+        if privacy:
+            return [_apply_privacy_to_log_payload(item, privacy=True) for item in results]
+        return list(results)
 
     def _astrbot_log_paths(self) -> list[Path]:
         logs_dir = Path(self._astrbot_cfg_str("logs_dir", "data/logs")).expanduser()
+        try:
+            logs_root = logs_dir.resolve()
+        except OSError:
+            logs_root = logs_dir
         files = _as_list(self._astrbot_cfg("log_files", DEFAULT_ASTRBOT_LOG_FILES), DEFAULT_ASTRBOT_LOG_FILES)
         paths: list[Path] = []
         for item in files:
-            path = Path(str(item)).expanduser()
+            raw = str(item or "").strip()
+            if not raw:
+                continue
+            path = Path(raw).expanduser()
             if not path.is_absolute():
                 path = logs_dir / path
+            # 沙箱：仅允许 logs_dir 内文件，拒绝 .. 与目录外绝对路径
+            if not _path_is_within(path, logs_root):
+                logger.warning("[ObserverPanel] 拒绝越界日志路径: %s (root=%s)", path, logs_root)
+                continue
             paths.append(path)
         return paths
 

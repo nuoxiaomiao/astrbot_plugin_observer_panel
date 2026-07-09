@@ -16,21 +16,25 @@
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   gap: 14px;
   padding: 12px;
-  min-height: 480px;
+  /* 不在布局层设 height/max-height：仅 max-height 时子项 height:100% 无法解析，
+     内容会被外层 .panel { overflow:hidden } 裁切且无法滚动。
+     改为左右各自 max-height + overflow，面板高度随列内容 capped。 */
   align-items: start;
 }
 
 .session-list,
 .session-detail {
   min-width: 0;
+  /* 两列独立限高，长内容在列内滚动，不把整块「有效会话」撑开 */
+  max-height: min(72vh, 720px);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .session-list {
   display: grid;
   align-content: start;
   gap: 8px;
-  max-height: 76vh;
-  overflow: auto;
   /* 上下留出缓冲，避免顶/底卡片 selected 发光被 overflow 裁切 */
   padding: 4px 4px 4px 0;
 }
@@ -449,7 +453,8 @@
 /* ─── Overview & Journey ─── */
 
 .session-detail {
-  min-height: 260px;
+  /* max-height / overflow 已与 .session-list 在上方共用声明 */
+  min-height: 0;
 }
 
 .session-journey {
@@ -1536,7 +1541,11 @@ body.anim-off .session-detail.is-session-enter .session-flow-wrap {
   }
 
   .session-list {
-    max-height: 320px;
+    max-height: 280px;
+  }
+
+  .session-detail {
+    max-height: min(55vh, 480px);
   }
 }
 

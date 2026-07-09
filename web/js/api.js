@@ -2,8 +2,8 @@
 // 工具函数 - 网络请求
 // ============================================================================
 
-import { state } from "./state.js?v=20260709-mobile1";
-import { token } from "./config.js?v=20260709-mobile1";
+import { state } from "./state.js?v=20260709-mobile2";
+import { token } from "./config.js?v=20260709-mobile2";
 
 // 请求超时设置
 const REQUEST_TIMEOUT_MS = 8000;  // 8 秒超时

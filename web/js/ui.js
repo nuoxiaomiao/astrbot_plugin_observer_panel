@@ -2,7 +2,7 @@
 // UI 交互
 // ============================================================================
 
-import { state } from "./state.js?v=20260709-mobile1";
+import { state } from "./state.js?v=20260709-mobile2";
 import {
   SIDEBAR_COLLAPSED_KEY,
   COMPACT_KEY,
@@ -11,14 +11,14 @@ import {
   NOTIFY_COOLDOWN_MS,
   NOTIFY_LAST_KEY,
   SHORTCUT_KEY_LABELS,
-} from "./config.js?v=20260709-mobile1";
-import { formatBytes, formatPercent, shortUptime, usageKind, diagnosticLabel, formatCompactLogTime } from "./utils/format.js?v=20260709-mobile1";
+} from "./config.js?v=20260709-mobile2";
+import { formatBytes, formatPercent, shortUptime, usageKind, diagnosticLabel, formatCompactLogTime } from "./utils/format.js?v=20260709-mobile2";
 import {
   $,
   setText,
   toast,
-} from "./utils/dom.js?v=20260709-mobile1";
-import { compactText } from "./utils/log-text.js?v=20260709-mobile1";
+} from "./utils/dom.js?v=20260709-mobile2";
+import { compactText } from "./utils/log-text.js?v=20260709-mobile2";
 
 // ============================================================================
 // 侧边栏折叠（2.1）
@@ -758,7 +758,7 @@ export function removeLoadingState(element) {
   }
 }
 
-import { renderDetailPanel } from "./components/event-list.js?v=20260709-mobile1";
+import { renderDetailPanel } from "./components/event-list.js?v=20260709-mobile2";
 
 // ============================================================================
 // 详情面板

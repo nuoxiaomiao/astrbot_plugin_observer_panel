@@ -18,8 +18,10 @@ import {
   badge,
   bindDetailsState,
   detailKey,
+  stableKeyText,
 } from "../utils/dom.js?v=20260709-mobile2";
 import { compactJson, compactText } from "../utils/log-text.js?v=20260709-mobile2";
+import { shouldAnimate } from "../utils/motion.js?v=20260709-mobile2";
 import { renderBarChart } from "../components/chart.js?v=20260709-mobile2";
 import { focusLogEntry } from "../components/log-list.js?v=20260709-mobile2";
 import {
@@ -287,32 +289,33 @@ function patchSessionList(list, sessions) {
 
 function sessionDetailSignature(session) {
   if (!session) return ["astrbot-session-detail", "empty", state.privacyMode];
+  // 内容签名：不含 lastTs/durationMs，避免 live 轮询每 tick 触发 animate
   const toolsSig = (session.tools || [])
-    .map((t) => `${t.id || t.name}:${t.status || ""}:${t.startTs || 0}:${t.endTs || 0}:${t.evidenceLogEntryId || ""}:${t.resultLogEntryId || ""}`)
+    .map((t) => `${t.id || t.name}:${t.status || ""}:${t.resultLogEntryId || ""}:${String(t.result || "").length}`)
     .join("|");
+  const eventsSig = (session.events || []).join(",");
   return [
     "astrbot-session-detail",
     state.privacyMode,
     session.spanId,
     (session.aliasSpanIds || []).join(","),
+    session.status,
     session.displayStatus,
     session.replyKind,
-    session.startTs,
-    session.lastTs,
     session.senderName,
-    session.messageOutline,
-    session.response,
-    session.reasoningContent,
-    session.reasoningLogEntryId,
-    session.reasoningTs,
-    session.reasoningTokens,
-    session.durationMs,
-    session.timeToFirstTokenMs,
+    stableKeyText(session.messageOutline, 120),
+    stableKeyText(session.response, 160),
+    stableKeyText(session.reasoningContent, 120),
+    session.reasoningLogEntryId || "",
     session.providerId,
     session.model,
-    JSON.stringify(session.tokenUsage || {}),
-    (session.events || []).join(","),
+    session.personaId || "",
+    eventsSig,
     toolsSig,
+    // 完成态再纳入耗时/token，避免 live 抖动
+    session.status === "complete" || session.status === "error"
+      ? `${session.durationMs || ""}:${session.timeToFirstTokenMs || ""}:${JSON.stringify(session.tokenUsage || {})}`
+      : "live",
   ];
 }
 
@@ -739,7 +742,8 @@ function updateFlowStep(row, step, index) {
   if (title) {
     title.textContent = step.title;
     title.classList.toggle("session-live-copy", Boolean(step.liveClass));
-    if (step.liveClass) title.classList.add(step.liveClass);
+    title.classList.toggle("is-running", step.liveClass === "is-running");
+    title.classList.toggle("is-generating", step.liveClass === "is-generating");
   }
   patchFlowBody(row, step);
   const aside = row.querySelector(".session-flow-aside");
@@ -843,10 +847,11 @@ function buildSessionJourney(session, insights) {
   // 2. 唤醒/规则选择：仅当 persona 事件已发生才显示
   if (personaEvent || session.personaId) {
     const nextTs = modelStartEvent?.timestamp || (tools[0]?.startTs || 0) || lastTs;
+    const personaBody = session.personaId || personaEvent?.detail || "已进入 Agent 处理流程";
     steps.push({
       key: "persona",
       title: "检索记忆 / 唤醒规则",
-      body: session.personaId || personaEvent?.detail || "已进入 Agent 处理流程",
+      body: privacyText(personaBody, "隐私模式已隐藏规则详情"),
       timeLabel: personaEvent?.timestamp ? formatTime(personaEvent.timestamp) : "--",
       meta: stepMetaWithDuration(personaEvent?.timestamp || sessionStartTs, nextTs, personaEvent?.meta || "已确认可用规则与工具集"),
       badgeLabel: "规则就绪",
@@ -1067,8 +1072,9 @@ function setLiveText(el, newText, liveClass, animate) {
   }
 
   el.dataset.liveText = newText;
+  const useMotion = Boolean(animate) && shouldAnimate();
 
-  if (!animate) {
+  if (!useMotion) {
     el.classList.remove("is-switching");
     el.replaceChildren();
     el.appendChild(document.createTextNode(newText));
@@ -1391,6 +1397,7 @@ function renderSessionDetail(session, insights) {
       patchSessionFlow(flow, buildSessionJourney(session, insights), true);
       flowWrap.append(flowTitle, flow);
 
+      const swapDelay = shouldAnimate() ? 280 : 0;
       // 在 live 卡片淡出后替换为 flow 并触发淡入
       window.setTimeout(() => {
         // 检查 liveWrap 仍在 DOM 中（未被其他渲染清除）
@@ -1401,7 +1408,7 @@ function renderSessionDetail(session, insights) {
         // 强制重排后移除 is-entering，触发 CSS 过渡淡入
         void flowWrap.offsetWidth;
         flowWrap.classList.remove("is-entering");
-      }, 280);
+      }, swapDelay);
     }
     return;
   }

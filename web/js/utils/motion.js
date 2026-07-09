@@ -4,6 +4,15 @@
 
 export const VIEW_TRANSITION_MS = 200;
 
+/** anim-off / prefers-reduced-motion 时跳过 JS 延迟动效 */
+export function shouldAnimate() {
+  if (typeof document !== "undefined" && document.body?.classList.contains("anim-off")) return false;
+  if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+    return false;
+  }
+  return true;
+}
+
 /**
  * 在两个面板容器之间做淡出/淡入切换。
  * @param {HTMLElement|null} oldView
@@ -11,17 +20,18 @@ export const VIEW_TRANSITION_MS = 200;
  * @param {{ durationMs?: number, activate?: () => void }} options
  */
 export function transitionViews(oldView, newView, options = {}) {
-  const durationMs = options.durationMs ?? VIEW_TRANSITION_MS;
   const activate = options.activate || (() => {});
+  const durationMs = shouldAnimate() ? (options.durationMs ?? VIEW_TRANSITION_MS) : 0;
 
   if (!newView) {
     activate();
     return;
   }
 
-  if (!oldView || oldView === newView) {
+  if (!oldView || oldView === newView || durationMs <= 0) {
     activate();
-    newView.style.opacity = "";
+    if (newView) newView.style.opacity = "";
+    if (oldView && oldView !== newView) oldView.style.opacity = "";
     return;
   }
 
@@ -46,6 +56,11 @@ export function transitionViews(oldView, newView, options = {}) {
 export function animateFillWidth(fill, percent, { fromZero = false } = {}) {
   if (!fill) return;
   const target = `${Math.max(0, Math.min(100, Number(percent || 0)))}%`;
+  if (!shouldAnimate()) {
+    fill.style.width = target;
+    fill.classList.remove("is-pulse");
+    return;
+  }
   if (fromZero || !fill.style.width) {
     fill.style.width = "0%";
   }

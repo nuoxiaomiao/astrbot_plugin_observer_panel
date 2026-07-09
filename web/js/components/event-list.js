@@ -2,9 +2,9 @@
 // 组件 - 事件列表
 // ============================================================================
 
-import { state } from "../state.js?v=20260709-mobile1";
-import { IMPORTANT_EVENT_TYPES } from "../config.js?v=20260709-mobile1";
-import { formatTime, formatCompactLogTime } from "../utils/format.js?v=20260709-mobile1";
+import { state } from "../state.js?v=20260709-mobile2";
+import { IMPORTANT_EVENT_TYPES } from "../config.js?v=20260709-mobile2";
+import { formatTime, formatCompactLogTime } from "../utils/format.js?v=20260709-mobile2";
 import {
   $,
   setText,
@@ -18,7 +18,7 @@ import {
   pruneOpenDetails,
   eventChainDetailKey,
   renderRawLogBlock,
-} from "../utils/dom.js?v=20260709-mobile1";
+} from "../utils/dom.js?v=20260709-mobile2";
 import {
   eventTypeLabel,
   eventTypeBadge,
@@ -26,8 +26,8 @@ import {
   confidenceLabel,
   eventDurationLabel,
   evidenceDetailKey,
-} from "../log/analytics.js?v=20260709-mobile1";
-import { focusLogEntry } from "./log-list.js?v=20260709-mobile1";
+} from "../log/analytics.js?v=20260709-mobile2";
+import { focusLogEntry } from "./log-list.js?v=20260709-mobile2";
 
 let renderLogsRef = () => {};
 
@@ -143,7 +143,7 @@ export function selectImportantEvent(eventId) {
       el.classList.toggle("selected", !!state.selectedEventId && el.dataset.eventId === state.selectedEventId);
     });
   }
-  renderDetailPanel();
+  renderDetailPanel(true);
   // 平板抽屉断点（≤1400px 且非手机内联区）下，选中事件时滑出详情抽屉
   if (state.selectedEventId && window.matchMedia("(max-width: 1400px) and (min-width: 981px)").matches) {
     document.querySelector(".workspace-detail")?.classList.add("open");
@@ -151,14 +151,16 @@ export function selectImportantEvent(eventId) {
   }
 }
 
-export function renderDetailPanel() {
+export function renderDetailPanel(animate = false) {
   const body = $("detailBody");
   if (!body) return;
   body.innerHTML = "";
-  // 内容重建后触发一次入场动画（尊重动画开关 / reduced-motion）
+  // 仅在用户主动选中事件时播放入场动画；数据刷新/关闭不重播（尊重动画开关 / reduced-motion）
   body.classList.remove("detail-enter");
-  void body.offsetWidth; // 强制 reflow，使重复选择也能重播动画
-  body.classList.add("detail-enter");
+  if (animate) {
+    void body.offsetWidth; // 强制 reflow，使重复选择也能重播动画
+    body.classList.add("detail-enter");
+  }
   const title = $("detailTitle");
   const stamp = $("detailStamp");
   const event = selectedImportantEvent();

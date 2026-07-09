@@ -2,9 +2,9 @@
 // 日志缓存管理
 // ============================================================================
 
-import { state } from "../state.js?v=20260709-mobile1";
-import { TRACE_ANALYSIS_ENTRY_LIMIT } from "../config.js?v=20260709-mobile1";
-import { stableKeyText } from "../utils/dom.js?v=20260709-mobile1";
+import { state } from "../state.js?v=20260709-mobile2";
+import { TRACE_ANALYSIS_ENTRY_LIMIT } from "../config.js?v=20260709-mobile2";
+import { stableKeyText } from "../utils/dom.js?v=20260709-mobile2";
 
 export function collectLogFiles() {
   const data = state.logs || {};
@@ -35,8 +35,8 @@ export function recentAnalysisEntries(entries) {
   return entries
     .slice()
     .sort((a, b) => {
-      const aTime = a.timestamp || a.fileMtime || 0;
-      const bTime = b.timestamp || b.fileMtime || 0;
+      const aTime = a.timestamp || (a.fileMtime ? (a.fileMtime > 1e12 ? a.fileMtime : a.fileMtime * 1000) : 0);
+      const bTime = b.timestamp || (b.fileMtime ? (b.fileMtime > 1e12 ? b.fileMtime : b.fileMtime * 1000) : 0);
       return bTime - aTime || b.globalIndex - a.globalIndex;
     })
     .slice(0, TRACE_ANALYSIS_ENTRY_LIMIT);

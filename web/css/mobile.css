@@ -1,0 +1,152 @@
+/* ==========================================================================
+   统一移动布局（最终收敛层）
+   本文件在 main.css 中【最后】导入，确保其移动端规则的源顺序晚于
+   views/*.css 的桌面网格，从而在同特异性下正确覆盖（媒体查询不加特异性）。
+   目标：详情面板正确呈现（平板抽屉 / 手机内联）、各页统一单列、消除横向溢出。
+   ========================================================================== */
+
+/* —— 平板抽屉态（981–1400px）：详情为右侧滑出抽屉，需要关闭按钮 —— */
+@media (min-width: 981px) and (max-width: 1400px) {
+  .detail-close-btn {
+    display: inline-flex;
+  }
+}
+
+/* —— 手机 / 竖屏（≤980px）：详情面板改为内联堆叠在主内容下方，常驻可见 —— */
+@media (max-width: 980px) {
+  /* 复位为普通流内块（撤销 ≤1400 的 fixed 抽屉定位） */
+  .workspace-detail {
+    position: static;
+    right: auto;
+    top: auto;
+    left: auto;
+    width: auto;
+    max-width: none;
+    height: auto;
+    box-shadow: none;
+    z-index: auto;
+    opacity: 1;
+    visibility: visible;
+  }
+
+  /* 非日志页：整列彻底移除，不留空隙（覆盖桌面的 visibility:hidden 占位） */
+  body.detail-hidden .workspace-detail {
+    display: none;
+  }
+
+  /* 内联态无需抽屉遮罩与关闭按钮 */
+  body.detail-open::before {
+    display: none;
+  }
+  .detail-close-btn {
+    display: none;
+  }
+
+  .detail-panel {
+    height: auto;
+    min-height: 0;
+  }
+  .detail-panel .detail-empty {
+    min-height: 140px;
+  }
+}
+
+/* —— 统一单列排版（≤768px）：总览 / AstrBot / 系统 / 日志 一致纵向堆叠 —— */
+@media (max-width: 768px) {
+  /* 全局兜底：禁止横向溢出 */
+  html,
+  body {
+    overflow-x: hidden;
+  }
+
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  /* 通用多列内容网格 → 单列 */
+  .layout,
+  .layout.two,
+  .layout.three,
+  .big-screen-grid,
+  .function-grid,
+  .config-grid,
+  .log-metrics,
+  .module-chart,
+  .detail-grid,
+  .evidence-grid,
+  .state-viz,
+  .session-visual-layout {
+    grid-template-columns: 1fr;
+  }
+
+  /* 视图内高特异性网格（在 views/*.css 中定义，需匹配特异性方能覆盖） */
+  .info-item .detail-grid,
+  .astrbot-visuals .info-item .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* 系统页 .row 4 列表格 → 堆叠为标签/值两行式单列 */
+  .row,
+  .row.header {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .row.header {
+    display: none; /* 单列堆叠下表头无意义 */
+  }
+
+  /* 小指标卡保留 2 列（信息密度合适、仍可读） */
+  .status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 日志行 / 会话链路 / KV 行 → 单列堆叠 */
+  .log-entry,
+  .event-chain-row,
+  .kv-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* 易超宽元素：允许换行 / 收缩，杜绝横向滚动 */
+  .session-card,
+  .bar-row,
+  .log-entry,
+  .panel,
+  .kv-value,
+  .event-item,
+  .workspace-main {
+    min-width: 0;
+  }
+  .log-entry-summary,
+  .kv-value,
+  .event-title strong,
+  .event-item p,
+  .session-card-title strong,
+  .session-card-title small {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+  .raw-log-text,
+  .code-block {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* 柱状图标签列在窄屏收窄，给数值/条留空间 */
+  .bar-row {
+    grid-template-columns: minmax(56px, 96px) minmax(60px, 1fr) 40px;
+  }
+
+  /* 顶部工具栏在窄屏允许换行，避免溢出 */
+  .workspace-head {
+    flex-wrap: wrap;
+  }
+}
+
+/* —— 超小屏（≤480px）微调：状态卡也单列，避免过窄 —— */
+@media (max-width: 480px) {
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+}
