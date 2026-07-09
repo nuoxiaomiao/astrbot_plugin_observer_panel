@@ -11,7 +11,7 @@ import { renderSummary } from "./views/overview.js?v=20260709-mobile2";
 import { renderSystem } from "./views/system.js?v=20260709-mobile2";
 import { renderAstrBot } from "./views/astrbot.js?v=20260709-mobile2";
 import { renderLogs } from "./views/logs.js?v=20260709-mobile2";
-import { bindUI, promptNotificationPermission, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode, addLoadingState, removeLoadingState } from "./ui.js?v=20260709-mobile2";
+import { bindUI, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode, addLoadingState, removeLoadingState } from "./ui.js?v=20260709-mobile2";
 import { initEventListActions } from "./components/event-list.js?v=20260709-mobile2";
 import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260709-mobile2";
 import { transitionViews } from "./utils/motion.js?v=20260709-mobile2";
@@ -410,7 +410,6 @@ syncDetailVisibility();
 selectAstrBotTab(state.astrbotSubTab);
 
 progressiveLogInit();
-promptNotificationPermission();
 
 // ============================================================================
 // 动画级别切换（P3）

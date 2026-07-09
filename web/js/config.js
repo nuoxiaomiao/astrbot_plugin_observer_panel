@@ -157,10 +157,6 @@ export const DEFAULT_IMPORTANT_EVENT_LIMIT = 80;
 export const DEFAULT_LOG_PAGE_SIZE = 80;
 export const DEFAULT_RAW_CLIP_LENGTH = 5000;
 
-// 浏览器通知
-export const NOTIFY_COOLDOWN_MS = 60 * 1000;
-export const NOTIFY_LAST_KEY = "op_last_notify_ts";
-
 // UI 本地存储键
 export const SIDEBAR_COLLAPSED_KEY = "op_sidebar_collapsed";
 export const COMPACT_KEY = "op_compact";

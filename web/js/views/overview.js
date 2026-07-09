@@ -15,7 +15,6 @@ import {
 import { compactText, compactJson } from "../utils/log-text.js?v=20260709-mobile2";
 import { renderBarChart } from "../components/chart.js?v=20260709-mobile2";
 import { renderEventList } from "../components/event-list.js?v=20260709-mobile2";
-import { checkDiagnosticNotifications } from "../ui.js?v=20260709-mobile2";
 
 function diagnosticLabel(status) {
   return DIAGNOSTIC_LEVELS[status]?.label || "未知";
@@ -126,9 +125,6 @@ export function renderSummary() {
     诊断项: diagnostics.issue_count || 0,
     日志可读: `${readableLogs} 个文件`,
   });
-
-  // 异常诊断触发浏览器通知（2.5）
-  checkDiagnosticNotifications(diagnostics);
 }
 
 /**

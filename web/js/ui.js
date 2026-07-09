@@ -8,8 +8,6 @@ import {
   COMPACT_KEY,
   THEME_KEY,
   DRAG_LAYOUT_PREFIX,
-  NOTIFY_COOLDOWN_MS,
-  NOTIFY_LAST_KEY,
   SHORTCUT_KEY_LABELS,
 } from "./config.js?v=20260709-mobile2";
 import { formatBytes, formatPercent, shortUptime, usageKind, diagnosticLabel, formatCompactLogTime } from "./utils/format.js?v=20260709-mobile2";
@@ -476,60 +474,6 @@ export function bindOverviewJump(selectTab) {
       }, 80);
     });
   }
-}
-
-// ============================================================================
-// 浏览器告警通知（2.5）
-// ============================================================================
-
-export function buildDiagnosticMessage(diagnostics) {
-  const issues = diagnostics.issues || diagnostics.items || [];
-  const badItems = issues.filter((it) => (it.severity || it.level || "").toLowerCase() === "bad");
-  if (badItems.length) {
-    const first = badItems[0];
-    return `[观察面板] 异常：${first.title || first.name || first.message || "存在异常诊断项"}`;
-  }
-  return `[观察面板] 诊断状态异常，请检查面板`;
-}
-
-export function checkDiagnosticNotifications(diagnostics) {
-  if (!diagnostics || diagnostics.status !== "bad") {
-    return;
-  }
-  if (!("Notification" in window)) return;
-  if (Notification.permission !== "granted") return;
-
-  let lastTs = 0;
-  try {
-    lastTs = Number(sessionStorage.getItem(NOTIFY_LAST_KEY) || 0);
-  } catch (err) { /* ignore */ }
-  const now = Date.now();
-  if (now - lastTs < NOTIFY_COOLDOWN_MS) return;
-
-  try {
-    sessionStorage.setItem(NOTIFY_LAST_KEY, String(now));
-  } catch (err) { /* ignore */ }
-  try {
-    new Notification(buildDiagnosticMessage(diagnostics), {
-      tag: "observer-panel-alert",
-      renotify: true,
-    });
-  } catch (err) { /* ignore */ }
-}
-
-export function promptNotificationPermission() {
-  if (!("Notification" in window)) return;
-  if (Notification.permission !== "default") return;
-  // 延迟提示，避免与加载动画冲突
-  window.setTimeout(() => {
-    toast("如需接收异常告警，请点击右上角允许浏览器通知");
-    // 仅在用户后续交互时请求权限（避免自动弹窗打扰）
-    const requestOnce = () => {
-      Notification.requestPermission();
-      document.removeEventListener("click", requestOnce);
-    };
-    document.addEventListener("click", requestOnce, { once: true });
-  }, 2000);
 }
 
 // ============================================================================
