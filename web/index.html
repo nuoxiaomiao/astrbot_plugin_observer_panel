@@ -8,7 +8,7 @@
     <meta name="color-scheme" content="dark">
     <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="%230a0a0a"/><rect x="14" y="14" width="72" height="72" fill="none" stroke="%23ff2a2a" stroke-width="8"/><rect x="42" y="42" width="16" height="16" fill="%23ff2a2a"/></svg>'>
     <title>AstrBot 观察面板</title>
-    <link rel="stylesheet" href="/css/main.css?v=20260708-telemetry1">
+    <link rel="stylesheet" href="/css/main.css?v=20260709-mobile1">
   </head>
   <body>
     <main class="shell">
@@ -294,12 +294,15 @@
         <section class="panel detail-panel">
           <div class="panel-head">
             <h2 id="detailTitle">工作区详情</h2>
-            <span id="detailStamp">--</span>
+            <span class="panel-head-actions">
+              <span id="detailStamp">--</span>
+              <button id="detailClose" type="button" class="detail-close-btn" title="关闭详情" aria-label="关闭详情">✕</button>
+            </span>
           </div>
           <div id="detailBody" class="detail-body">
             <div class="detail-empty">
               <strong>选择事件查看证据</strong>
-              <span>点击重要信息后，这里会显示判定规则、来源行号、原始日志和会话链路。</span>
+              <span>点击重要信息后，这里会显示判定规则、来源行号和原始日志。</span>
             </div>
           </div>
         </section>
@@ -307,6 +310,6 @@
     </main>
 
     <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-    <script type="module" src="/js/main.js?v=20260708-telemetry1"></script>
+    <script type="module" src="/js/main.js?v=20260709-mobile1"></script>
   </body>
 </html>

@@ -2,10 +2,10 @@
 // 视图 - 系统
 // ============================================================================
 
-import { state } from "../state.js?v=20260708-telemetry1";
-import { INTERFACE_STATE_LABELS } from "../config.js?v=20260708-telemetry1";
-import { formatBytes, formatPercent, formatNumber, shortUptime, usageKind } from "../utils/format.js?v=20260708-telemetry1";
-import { $, setText, renderKv, detailRow, emptyBlock, renderWorkspaceChrome } from "../utils/dom.js?v=20260708-telemetry1";
+import { state } from "../state.js?v=20260709-mobile1";
+import { INTERFACE_STATE_LABELS } from "../config.js?v=20260709-mobile1";
+import { formatBytes, formatPercent, formatNumber, shortUptime, usageKind } from "../utils/format.js?v=20260709-mobile1";
+import { $, setText, renderKv, detailRow, emptyBlock, renderWorkspaceChrome } from "../utils/dom.js?v=20260709-mobile1";
 
 /**
  * 创建堆栈项目元素（磁盘、网络等）

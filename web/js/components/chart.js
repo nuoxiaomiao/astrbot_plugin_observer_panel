@@ -2,8 +2,8 @@
 // 组件 - 条形图
 // ============================================================================
 
-import { renderSignature, emptyBlock } from "../utils/dom.js?v=20260708-telemetry1";
-import { animateFillWidth } from "../utils/motion.js?v=20260708-telemetry1";
+import { renderSignature, emptyBlock } from "../utils/dom.js?v=20260709-mobile1";
+import { animateFillWidth } from "../utils/motion.js?v=20260709-mobile1";
 
 function chartSignature(items) {
   return [

@@ -2,19 +2,19 @@
 // 入口文件
 // ============================================================================
 
-console.log("[ObserverPanel] main.js loaded, build 20260708-telemetry1");
+console.log("[ObserverPanel] main.js loaded, build 20260709-mobile1");
 
-import { state } from "./state.js?v=20260708-telemetry1";
-import { fetchJson, logsApiPath, fetchQueue } from "./api.js?v=20260708-telemetry1";
-import { applyPublicConfig, renderWorkspaceChrome, toast, $ } from "./utils/dom.js?v=20260708-telemetry1";
-import { renderSummary } from "./views/overview.js?v=20260708-telemetry1";
-import { renderSystem } from "./views/system.js?v=20260708-telemetry1";
-import { renderAstrBot } from "./views/astrbot.js?v=20260708-telemetry1";
-import { renderLogs } from "./views/logs.js?v=20260708-telemetry1";
-import { bindUI, promptNotificationPermission, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode, addLoadingState, removeLoadingState } from "./ui.js?v=20260708-telemetry1";
-import { initEventListActions } from "./components/event-list.js?v=20260708-telemetry1";
-import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260708-telemetry1";
-import { transitionViews } from "./utils/motion.js?v=20260708-telemetry1";
+import { state } from "./state.js?v=20260709-mobile1";
+import { fetchJson, logsApiPath, fetchQueue } from "./api.js?v=20260709-mobile1";
+import { applyPublicConfig, renderWorkspaceChrome, toast, $ } from "./utils/dom.js?v=20260709-mobile1";
+import { renderSummary } from "./views/overview.js?v=20260709-mobile1";
+import { renderSystem } from "./views/system.js?v=20260709-mobile1";
+import { renderAstrBot } from "./views/astrbot.js?v=20260709-mobile1";
+import { renderLogs } from "./views/logs.js?v=20260709-mobile1";
+import { bindUI, promptNotificationPermission, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode, addLoadingState, removeLoadingState } from "./ui.js?v=20260709-mobile1";
+import { initEventListActions } from "./components/event-list.js?v=20260709-mobile1";
+import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260709-mobile1";
+import { transitionViews } from "./utils/motion.js?v=20260709-mobile1";
 
 const FAST_LOG_REFRESH_MS = 1000;
 
@@ -244,7 +244,13 @@ async function refreshLogsOnly() {
 
 function syncDetailVisibility() {
   // 仅日志页需要右侧详情面板；其他页收起以腾出空间（问题2）
-  document.body.classList.toggle("detail-hidden", state.activeTab !== "logs");
+  const isLogs = state.activeTab === "logs";
+  document.body.classList.toggle("detail-hidden", !isLogs);
+  // 离开日志页时，收起可能残留的平板抽屉态（open/detail-open + 遮罩）
+  if (!isLogs) {
+    document.querySelector(".workspace-detail")?.classList.remove("open");
+    document.body.classList.remove("detail-open");
+  }
 }
 
 function applyMainViewState(name) {

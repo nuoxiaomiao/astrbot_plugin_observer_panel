@@ -54,6 +54,18 @@ body.edit-mode .panel .panel-head::before {
   align-items: center;
   gap: 10px;
 }
+
+/* 详情关闭按钮：桌面常驻列不需要，仅移动/平板抽屉态显示 */
+.detail-close-btn {
+  display: none;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+}
 .panel {
   border: 1px solid var(--line-strong);
   border-radius: 0;
@@ -92,6 +104,24 @@ body.edit-mode .panel .panel-head::before {
   display: grid;
   align-content: start;
   gap: 12px;
+}
+
+/* 详情内容切换入场：整体淡入 + 各区块轻微交错（只 transform/opacity，遵循遥测风格） */
+.detail-body.detail-enter {
+  animation: viewFadeIn var(--motion-view-duration, 0.22s) var(--ease-out) both;
+}
+
+.detail-body.detail-enter .detail-section {
+  animation: fadeInUp 0.28s var(--ease-out) backwards;
+}
+
+.detail-body.detail-enter .detail-section:nth-child(1) { animation-delay: 0.02s; }
+.detail-body.detail-enter .detail-section:nth-child(2) { animation-delay: 0.07s; }
+.detail-body.detail-enter .detail-section:nth-child(3) { animation-delay: 0.12s; }
+
+body.anim-off .detail-body.detail-enter,
+body.anim-off .detail-body.detail-enter .detail-section {
+  animation: none;
 }
 
 .detail-empty {

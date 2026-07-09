@@ -2,9 +2,9 @@
 // 日志缓存管理
 // ============================================================================
 
-import { state } from "../state.js?v=20260708-telemetry1";
-import { TRACE_ANALYSIS_ENTRY_LIMIT } from "../config.js?v=20260708-telemetry1";
-import { stableKeyText } from "../utils/dom.js?v=20260708-telemetry1";
+import { state } from "../state.js?v=20260709-mobile1";
+import { TRACE_ANALYSIS_ENTRY_LIMIT } from "../config.js?v=20260709-mobile1";
+import { stableKeyText } from "../utils/dom.js?v=20260709-mobile1";
 
 export function collectLogFiles() {
   const data = state.logs || {};
