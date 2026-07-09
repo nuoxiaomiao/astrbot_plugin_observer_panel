@@ -39,7 +39,22 @@ export const CORE_MODULE_LABELS = {
   "core.session": "核心: 会话",
   "core.config": "核心: 配置",
   "core.astrbot_config": "核心: 配置",
+  "core.zip_updator": "核心: 版本更新",
   "star.session_plugin_manager": "核心: 会话插件管理",
+  "star.star_manager": "核心: 插件管理",
+  "pipeline.scheduler": "核心: Pipeline 调度",
+  "pipeline.context_utils": "核心: Pipeline Hook",
+  "waking_check.stage": "核心: 唤醒检查",
+  "result_decorate.stage": "核心: 结果装饰",
+  "respond.stage": "核心: 响应阶段",
+  "agent_sub_stages.internal": "核心: Agent 子阶段",
+  "runners.tool_loop_agent_runner": "核心: Agent 工具循环",
+  "runners.base": "核心: Agent Runner",
+  "sources.openai_source": "模型: OpenAI",
+  "sources.request_retry": "模型: 请求重试",
+  "utils.reply_decision": "核心: 回复决策",
+  "utils.history_storage": "核心: 历史存储",
+  "utils.logger": "核心: 日志",
 };
 
 export const METHOD_MODULE_LABELS = {
@@ -54,6 +69,30 @@ export const PLUG_MODULE_LABELS = {
   "processors.memory_processor": "插件模块: 记忆处理",
   "storage.conversation_store": "插件模块: 对话存储",
   "utils.__init__": "插件模块: 工具函数",
+  "event_handler_modules.group_capture": "插件模块: 群聊捕获",
+  "event_handler_modules.memory_recall": "插件模块: 记忆召回",
+  "event_handler_modules.memory_reflection": "插件模块: 记忆反射",
+  "event_handler_modules.message_utils": "插件模块: 消息工具",
+  "retrieval.hybrid_retriever": "插件模块: 混合检索",
+  "astrbot.group_chat_context": "插件模块: 群聊上下文",
+};
+
+/** 按模块前缀归类（normalizeModuleGroup 优先查表） */
+export const MODULE_PREFIX_LABELS = {
+  "pipeline.": { label: "核心: Pipeline", className: "module-core", keyPrefix: "pipeline" },
+  "runners.": { label: "核心: Agent Runner", className: "module-core", keyPrefix: "runners" },
+  "agent_sub_stages.": { label: "核心: Agent 子阶段", className: "module-core", keyPrefix: "agent" },
+  "waking_check.": { label: "核心: 唤醒检查", className: "module-core", keyPrefix: "waking" },
+  "result_decorate.": { label: "核心: 结果装饰", className: "module-core", keyPrefix: "decorate" },
+  "respond.": { label: "核心: 响应阶段", className: "module-core", keyPrefix: "respond" },
+  "sources.": { label: "模型请求", className: "module-model", keyPrefix: "model" },
+  "managers.": { label: "插件模块: 会话管理", className: "module-plugin", keyPrefix: "managers" },
+  "processors.": { label: "插件模块: 处理器", className: "module-plugin", keyPrefix: "processors" },
+  "storage.": { label: "插件模块: 存储", className: "module-plugin", keyPrefix: "storage" },
+  "event_handler_modules.": { label: "插件模块: 事件处理", className: "module-plugin", keyPrefix: "event_handler" },
+  "retrieval.": { label: "插件模块: 检索", className: "module-plugin", keyPrefix: "retrieval" },
+  "aiocqhttp.": { label: "平台: aiocqhttp", className: "module-platform", keyPrefix: "platform:aiocqhttp" },
+  "qqofficial.": { label: "平台: QQ 官方", className: "module-platform", keyPrefix: "platform:qqofficial" },
 };
 
 export const TRACE_ACTION_LABELS = {

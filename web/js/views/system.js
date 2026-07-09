@@ -157,7 +157,12 @@ export function renderSystem() {
 
   // ★ 网络接口列表增量更新
   const networkList = $("networkList");
-  const visible = interfaces.filter((item) => item.name !== "lo" || item.addresses?.length);
+  const isLoopbackIface = (item) => {
+    if (item?.is_loopback === true) return true;
+    const name = String(item?.name || "").toLowerCase();
+    return name === "lo" || name === "lo0" || name.startsWith("loopback");
+  };
+  const visible = interfaces.filter((item) => !isLoopbackIface(item) || item.addresses?.length);
   const netExisting = new Map();
   networkList.querySelectorAll('[data-stack-key]').forEach(el => {
     const k = el.dataset.stackKey;

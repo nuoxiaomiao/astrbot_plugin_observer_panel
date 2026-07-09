@@ -10,6 +10,7 @@ import {
   CORE_MODULE_LABELS,
   METHOD_MODULE_LABELS,
   PLUG_MODULE_LABELS,
+  MODULE_PREFIX_LABELS,
   TRACE_ACTION_LABELS,
   EVENT_TYPES,
 } from "../config.js?v=20260709-mobile2";
@@ -248,16 +249,59 @@ export function normalizeModuleGroup(entry) {
     return pluginModuleGroup(token, rawToken) || moduleGroup(`plugin:${token}`, `插件: ${token}`, "module-plugin", rawToken);
   }
 
+  // 精确标签表：核心 / 插件模块 / 方法
+  if (CORE_MODULE_LABELS[lower]) {
+    const className = lower.startsWith("sources.") ? "module-model" : "module-core";
+    return moduleGroup(`mod:${lower}`, CORE_MODULE_LABELS[lower], className, rawToken);
+  }
+  if (METHOD_MODULE_LABELS[lower]) {
+    return moduleGroup(`method:${lower}`, METHOD_MODULE_LABELS[lower], "module-core", rawToken);
+  }
+  if (PLUG_MODULE_LABELS[lower]) {
+    return moduleGroup(`plug:${lower}`, PLUG_MODULE_LABELS[lower], "module-plugin", rawToken);
+  }
   if (String(entry.scope || "").toLowerCase() === "plug" && PLUG_MODULE_LABELS[lower]) {
     return moduleGroup(`plug:${lower}`, PLUG_MODULE_LABELS[lower], "module-plugin", rawToken);
+  }
+
+  // 前缀表：pipeline / runners / sources / platform adapters ...
+  for (const [prefix, meta] of Object.entries(MODULE_PREFIX_LABELS || {})) {
+    if (!lower.startsWith(prefix)) continue;
+    const rest = lower.slice(prefix.length).split(".")[0] || "";
+    if (prefix === "sources.") {
+      if (rest === "request_retry") {
+        return moduleGroup("model:request_retry", "模型: 请求重试", "module-model", rawToken);
+      }
+      const sourceName = rest.replace(/_source$/i, "") || "provider";
+      return moduleGroup(`model:${sourceName}`, `模型请求: ${humanizeModuleWord(sourceName)}`, "module-model", rawToken);
+    }
+    if (prefix.startsWith("aiocqhttp") || prefix.startsWith("qqofficial")) {
+      return moduleGroup(meta.keyPrefix, meta.label, meta.className, rawToken);
+    }
+    const label = rest
+      ? `${meta.label.replace(/:.*$/, "")}: ${humanizeModuleWord(rest)}`
+      : meta.label;
+    return moduleGroup(
+      `${meta.keyPrefix}:${lower}`,
+      CORE_MODULE_LABELS[lower] || PLUG_MODULE_LABELS[lower] || label,
+      meta.className,
+      rawToken,
+    );
   }
 
   if (lower.includes("aiocqhttp") || message.includes("RawMessage <Event")) {
     return moduleGroup("platform:aiocqhttp", "平台: aiocqhttp", "module-platform", rawToken);
   }
 
+  if (lower.includes("qqofficial")) {
+    return moduleGroup("platform:qqofficial", "平台: QQ 官方", "module-platform", rawToken);
+  }
+
   if (lower.startsWith("sources.")) {
     const sourceName = lower.slice("sources.".length).split(".")[0].replace(/_source$/i, "");
+    if (sourceName === "request_retry") {
+      return moduleGroup("model:request_retry", "模型: 请求重试", "module-model", rawToken);
+    }
     return moduleGroup(`model:${sourceName}`, `模型请求: ${humanizeModuleWord(sourceName)}`, "module-model", rawToken);
   }
 
@@ -280,6 +324,11 @@ export function normalizeModuleGroup(entry) {
     return moduleGroup(`method:${lower}`, label, "module-core", rawToken);
   }
 
+  if (lower.startsWith("utils.")) {
+    const label = CORE_MODULE_LABELS[lower] || `核心: ${humanizeModuleWord(lower.slice("utils.".length))}`;
+    return moduleGroup(`utils:${lower}`, label, "module-core", rawToken);
+  }
+
   if (/adapter|platform/i.test(token)) {
     return moduleGroup(`platform:${lower || "unknown"}`, `平台: ${humanizeModuleWord(token)}`, "module-platform", rawToken);
   }
@@ -290,6 +339,14 @@ export function normalizeModuleGroup(entry) {
 
   if (/^plug$/i.test(token)) {
     return moduleGroup("plugin:unknown", "插件: 未识别", "module-plugin", rawToken);
+  }
+
+  // 形如 meme_manager.main / spectrecore.main 的插件模块
+  if (/^[a-z0-9_]+(?:\.[a-z0-9_]+)+$/i.test(lower) && !lower.startsWith("module:")) {
+    const head = lower.split(".")[0];
+    if (/plugin|manager|meme|spectre|heart|memory|living/i.test(head)) {
+      return moduleGroup(`plugin:${head}`, `插件: ${humanizeModuleWord(head)}`, "module-plugin", rawToken);
+    }
   }
 
   const fallback = token || entry.fileName || "未识别";
@@ -656,8 +713,13 @@ const PLAIN_TOOL_RESULT_PATTERNS = [
 ];
 
 export function isPlainToolCallLog(entry) {
-  const text = `${entry.message || ""} ${entry.summary || ""} ${entry.raw || ""}`;
   if (entry.trace) return null;
+  // completion / provider repr 正文里常含 tool_calls 字段，禁止当 plain tool 事件
+  if (isPlainProviderResponseLog(entry)) return null;
+  const text = `${entry.message || ""} ${entry.summary || ""} ${entry.raw || ""}`;
+  if (/\bcompletion:\s*ChatCompletion\b/i.test(text) || /\bChatCompletion\(/i.test(text) || /\bLLMResponse\(/i.test(text)) {
+    return null;
+  }
   for (const pattern of PLAIN_TOOL_CALL_PATTERNS) {
     const match = text.match(pattern);
     if (match) {
@@ -668,8 +730,12 @@ export function isPlainToolCallLog(entry) {
 }
 
 export function isPlainToolResultLog(entry, toolName) {
-  const text = `${entry.message || ""} ${entry.summary || ""} ${entry.raw || ""}`;
   if (entry.trace) return null;
+  if (isPlainProviderResponseLog(entry)) return null;
+  const text = `${entry.message || ""} ${entry.summary || ""} ${entry.raw || ""}`;
+  if (/\bcompletion:\s*ChatCompletion\b/i.test(text) || /\bChatCompletion\(/i.test(text) || /\bLLMResponse\(/i.test(text)) {
+    return null;
+  }
   for (const pattern of PLAIN_TOOL_RESULT_PATTERNS) {
     if (pattern.test(text)) return { type: "tool_result", name: toolName || "未知工具" };
   }
@@ -711,6 +777,8 @@ export function isPlainHookLog(entry) {
 
 const PLAIN_AGENT_STAGE_PATTERNS = [
   /agent_sub_stages/i,
+  /runners\.tool_loop_agent_runner/i,
+  /runners\.base/i,
   /Agent state transition/i,
   /ready to request llm/i,
   /acquired session lock/i,
@@ -725,6 +793,7 @@ export function isPlainAgentStageLog(entry) {
 const PLAIN_PIPELINE_PATTERNS = [
   /pipeline\.scheduler/i,
   /pipeline 执行完毕/i,
+  /pipeline execution completed/i,
 ];
 
 export function isPlainPipelineLog(entry) {
@@ -735,6 +804,7 @@ export function isPlainPipelineLog(entry) {
 
 const PLAIN_PROVIDER_RESPONSE_PATTERNS = [
   /sources\..*_source/i,
+  /sources\.request_retry/i,
   /completion:\s*(?:ChatCompletion|Message|id='|id=")/i,
   /\bLLMResponse\(/i,
 ];
@@ -742,6 +812,10 @@ const PLAIN_PROVIDER_RESPONSE_PATTERNS = [
 export function isPlainProviderResponseLog(entry) {
   const text = `${entry.moduleName || ""} ${entry.message || ""} ${entry.summary || ""} ${entry.raw || ""}`;
   if (entry.trace) return null;
+  // request_retry 走 warn，不归 provider_response
+  if (/request_retry/i.test(entry.moduleName || "") || /request_retry/i.test(text)) {
+    return false;
+  }
   return PLAIN_PROVIDER_RESPONSE_PATTERNS.some((pattern) => pattern.test(text));
 }
 
@@ -1063,6 +1137,7 @@ export function isPlainConversationLog(entry) {
 
 const PLAIN_DECORATE_PATTERNS = [
   /result_decorate\.stage/i,
+  /respond\.stage/i,
   /on_decorating_result/i,
 ];
 
@@ -1078,7 +1153,7 @@ export function plainLogEvent(entry) {
   if (eventBus) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "message_in",
       title: eventBus.sender ? `收到 ${eventBus.sender} 的消息` : "收到平台消息",
       detail: compactText(eventBus.content || "空消息或平台通知", 180),
@@ -1095,7 +1170,7 @@ export function plainLogEvent(entry) {
   if (isPlainMemoryLog(entry)) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "memory",
       title: "记忆操作",
       detail: compactText(entry.summary || entry.message || entry.raw, 220),
@@ -1109,7 +1184,7 @@ export function plainLogEvent(entry) {
   if (isPlainWakingLog(entry)) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "waking",
       title: "唤醒检查",
       detail: compactText(entry.summary || entry.message || entry.raw, 180),
@@ -1123,7 +1198,7 @@ export function plainLogEvent(entry) {
   if (isPlainHookLog(entry)) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "hook",
       title: "Pipeline Hook",
       detail: compactText(entry.summary || entry.message || entry.raw, 220),
@@ -1137,7 +1212,7 @@ export function plainLogEvent(entry) {
   if (isPlainAgentStageLog(entry)) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "agent_stage",
       title: "Agent 阶段",
       detail: compactText(entry.summary || entry.message || entry.raw, 220),
@@ -1151,7 +1226,7 @@ export function plainLogEvent(entry) {
   if (isPlainPipelineLog(entry)) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "pipeline",
       title: "Pipeline 执行",
       detail: compactText(entry.summary || entry.message || entry.raw, 180),
@@ -1165,7 +1240,7 @@ export function plainLogEvent(entry) {
   if (isPlainProviderResponseLog(entry)) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "provider_response",
       title: "模型响应",
       detail: compactText(entry.summary || entry.message || entry.raw, 220),
@@ -1179,7 +1254,7 @@ export function plainLogEvent(entry) {
   if (isPlainMessageCleanupLog(entry)) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "message_cleanup",
       title: "消息清理",
       detail: compactText(entry.summary || entry.message || entry.raw, 220),
@@ -1193,7 +1268,7 @@ export function plainLogEvent(entry) {
   if (isPlainDecorateLog(entry)) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "decorate",
       title: "结果装饰",
       detail: compactText(entry.summary || entry.message || entry.raw, 220),
@@ -1207,7 +1282,7 @@ export function plainLogEvent(entry) {
   if (isPlainConversationLog(entry)) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "conversation",
       title: "会话操作",
       detail: compactText(entry.summary || entry.message || entry.raw, 220),
@@ -1221,7 +1296,7 @@ export function plainLogEvent(entry) {
   if (isPlainPluginLifecycleLog(entry)) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "plugin_lifecycle",
       title: "插件生命周期",
       detail: compactText(entry.summary || entry.message || entry.raw, 220),
@@ -1235,7 +1310,7 @@ export function plainLogEvent(entry) {
   if (entry.level === "error") {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "error",
       title: "日志错误",
       detail: compactText(entry.summary || entry.message || entry.raw, 240),
@@ -1249,7 +1324,7 @@ export function plainLogEvent(entry) {
   if (entry.level === "warn") {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "warn",
       title: "日志警告",
       detail: compactText(entry.summary || entry.message || entry.raw, 220),
@@ -1263,7 +1338,7 @@ export function plainLogEvent(entry) {
   if (isPlainOutgoingMessageLog(entry)) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "message_out",
       title: "发送 API 日志",
       detail: compactText(entry.summary || entry.message || entry.raw, 220),
@@ -1278,7 +1353,7 @@ export function plainLogEvent(entry) {
   if (toolCall) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "tool_call",
       title: `工具调用 ${toolCall.name}`,
       detail: compactText(entry.summary || entry.message || entry.raw, 220),
@@ -1294,7 +1369,7 @@ export function plainLogEvent(entry) {
   if (toolResult) {
     return {
       id: `plain:${entry.id}`,
-      timestamp: entry.timestamp || entry.fileMtime || 0,
+      timestamp: entryTimeMs(entry),
       type: "tool_result",
       title: `工具返回 ${toolResult.name}`,
       detail: compactText(entry.summary || entry.message || entry.raw, 220),

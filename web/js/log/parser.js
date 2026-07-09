@@ -5,7 +5,6 @@
 import { state } from "../state.js?v=20260709-mobile2";
 import { LOG_TIMESTAMP_RE } from "../config.js?v=20260709-mobile2";
 import {
-  compactText,
   safeObject,
   extractResultId,
   extractResultTs,
@@ -53,6 +52,27 @@ export function normalizeLevel(value) {
   return "";
 }
 
+/** 版本号括号如 v4.26.4，不能当 scope */
+export function isVersionBracket(part) {
+  return /^v?\d+(?:\.\d+)+(?:[-+][A-Za-z0-9.]+)?$/i.test(String(part || "").trim());
+}
+
+/** 模块定位括号：mod:line / path.py / file.js */
+export function isModuleBracket(part) {
+  const text = String(part || "");
+  return text.includes(":") || text.includes(".py") || text.includes(".js");
+}
+
+/** 是否可作为 Core/Plug 一类 scope */
+export function isScopeBracket(part) {
+  const text = String(part || "").trim();
+  if (!text) return false;
+  if (normalizeLevel(text)) return false;
+  if (isVersionBracket(text)) return false;
+  if (isModuleBracket(text)) return false;
+  return true;
+}
+
 export function structuredLevel(parts) {
   for (const part of parts) {
     const level = normalizeLevel(part);
@@ -71,6 +91,38 @@ export function tryParseJsonLog(rest) {
   } catch (err) {
     return null;
   }
+}
+
+/** 行首是否带 AstrBot 时间戳头 */
+export function isTimestampedLogLine(line) {
+  return /^\[\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?\]/.test(String(line || ""));
+}
+
+/**
+ * 无时间戳续行可挂到上一标准 plain 行（继承时间/级别/模块）。
+ * 不挂到纯 other 且无时间的碎片，避免无头堆叠。
+ */
+export function canAttachContinuation(prev) {
+  if (!prev) return false;
+  if (prev.trace) return false;
+  if (prev.timestamp) return true;
+  return Boolean(prev.continued && (prev.moduleName || prev.scope || prev.rawLevel));
+}
+
+export function attachContinuationLine(entry, line) {
+  const cont = String(line || "");
+  if (!entry || !cont) return entry;
+  entry.raw = `${entry.raw || ""}\n${cont}`;
+  entry.message = `${entry.message || ""}\n${cont}`;
+  entry.continued = true;
+  entry.continuationLines = Number(entry.continuationLines || 0) + 1;
+  if (!entry.trace) {
+    entry.summary = summarizePlainLog(entry.message, entry.raw, {
+      moduleName: entry.moduleName,
+      scope: entry.scope,
+    });
+  }
+  return entry;
 }
 
 function reasoningTextValue(value) {
@@ -173,8 +225,8 @@ export function parseLogLine(line, file, lineIndex, globalIndex) {
     level = detected.level;
     rawLevel = detected.rawLevel;
     levelSource = rawLevel ? "日志头" : "未标记";
-    scope = parts.find((part) => !normalizeLevel(part) && !part.includes(":") && !part.includes(".py") && !part.includes(".js") && !/^v?\d+(?:\.\d+)+/.test(part)) || "";
-    moduleName = [...parts].reverse().find((part) => part.includes(":") || part.includes(".py") || part.includes(".js")) || "";
+    scope = parts.find((part) => isScopeBracket(part)) || "";
+    moduleName = [...parts].reverse().find((part) => isModuleBracket(part)) || "";
     message = astrbot[3];
   } else if (timestamped) {
     timeText = timestamped[1];
@@ -193,8 +245,10 @@ export function parseLogLine(line, file, lineIndex, globalIndex) {
       level = detected.level;
       rawLevel = detected.rawLevel;
       levelSource = rawLevel ? "日志头" : "未标记";
-      scope = parts.find((part) => !normalizeLevel(part) && !part.includes(":") && !part.includes(".py") && !part.includes(".js")) || "";
-      moduleName = parts.find((part) => part.includes(":") || part.includes(".py") || part.includes(".js")) || "";
+      scope = parts.find((part) => isScopeBracket(part)) || "";
+      moduleName = [...parts].reverse().find((part) => isModuleBracket(part))
+        || parts.find((part) => isModuleBracket(part))
+        || "";
       message = raw.replace(/^\[[^\]]+\]\s*/, "");
     }
   } else {
@@ -213,15 +267,17 @@ export function parseLogLine(line, file, lineIndex, globalIndex) {
       level = detected.level;
       rawLevel = detected.rawLevel;
       levelSource = rawLevel ? "日志头" : "未标记";
-      scope = parts.find((part) => !normalizeLevel(part) && !part.includes(":") && !part.includes(".py") && !part.includes(".js")) || "";
-      moduleName = parts.find((part) => part.includes(":") || part.includes(".py") || part.includes(".js")) || "";
+      scope = parts.find((part) => isScopeBracket(part)) || "";
+      moduleName = parts.find((part) => isModuleBracket(part)) || "";
+      message = raw.replace(/^\[[^\]]+\]\s*/, "");
     }
-    message = raw.replace(/^\[[^\]]+\]\s*/, "");
   }
 
   const trace = buildTraceInfo(parsedJson);
   const timestamp = parseTimestamp(timeText || raw) || trace?.time || null;
-  const summary = parsedJson ? message : summarizePlainLog(message, raw);
+  const summary = parsedJson
+    ? message
+    : summarizePlainLog(message, raw, { moduleName, scope });
   return {
     id: `${file.source}:${file.path}:${lineNumber}`,
     raw,
@@ -242,6 +298,8 @@ export function parseLogLine(line, file, lineIndex, globalIndex) {
     message: message || raw,
     summary: summary || message || raw,
     trace,
+    continued: false,
+    continuationLines: 0,
   };
 }
 
@@ -257,10 +315,30 @@ export function buildFileLogEntries(file) {
   const entries = [];
   file.lines.forEach((line, lineIndex) => {
     if (!String(line || "").trim()) return;
+    const raw = String(line || "");
     const lineNumber = Number(file.base_line || 0) + lineIndex + 1;
+
+    // 无时间戳续行 → 附着上一标准 plain 行
+    if (!isTimestampedLogLine(raw) && canAttachContinuation(entries[entries.length - 1])) {
+      attachContinuationLine(entries[entries.length - 1], raw);
+      return;
+    }
+
     const cachedEntry = cachedByLine.get(lineNumber);
-    if (cachedEntry && cachedEntry.raw === String(line || "")) {
-      entries.push({ ...cachedEntry, fileMtime: file.mtime || 0, lineIndex });
+    // 仅命中未合并续行的单行缓存，避免多行 raw 与单行输入错配
+    if (
+      cachedEntry
+      && cachedEntry.raw === raw
+      && !cachedEntry.continued
+      && !Number(cachedEntry.continuationLines || 0)
+    ) {
+      entries.push({
+        ...cachedEntry,
+        fileMtime: file.mtime || 0,
+        lineIndex,
+        continued: false,
+        continuationLines: 0,
+      });
       return;
     }
     entries.push(parseLogLine(line, file, lineIndex, 0));

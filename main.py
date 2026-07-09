@@ -31,6 +31,11 @@ try:
 except ImportError:
     resource = None
 
+try:
+    import psutil  # type: ignore
+except ImportError:
+    psutil = None  # type: ignore
+
 
 PLUGIN_NAME = "astrbot_plugin_observer_panel"
 PLUGIN_VERSION = "0.4.2"
@@ -109,6 +114,29 @@ def _now_ms() -> int:
 
 def _is_linux() -> bool:
     return platform.system() == "Linux"
+
+
+def _is_windows() -> bool:
+    return platform.system() == "Windows"
+
+
+def _system_drive_root() -> Path:
+    """系统根磁盘路径：Windows 用 SystemDrive，其它用 /。"""
+    if _is_windows():
+        drive = str(os.environ.get("SystemDrive") or "C:").rstrip("\\/")
+        return Path(f"{drive}\\")
+    return Path("/")
+
+
+def _normalize_path_key(path: Path) -> str:
+    text = str(path)
+    try:
+        text = str(path.resolve())
+    except OSError:
+        pass
+    if _is_windows():
+        return os.path.normcase(text)
+    return text
 
 
 def _json_response(data: Any, status: int = 200) -> web.Response:
@@ -270,7 +298,13 @@ def _apply_privacy_to_log_payload(data: dict[str, Any], *, privacy: bool) -> dic
 
 def _path_is_within(path: Path, root: Path) -> bool:
     try:
-        path.resolve().relative_to(root.resolve())
+        resolved_path = path.resolve()
+        resolved_root = root.resolve()
+        if _is_windows():
+            return os.path.normcase(str(resolved_path)).startswith(
+                os.path.normcase(str(resolved_root)).rstrip("\\/") + os.sep
+            ) or os.path.normcase(str(resolved_path)) == os.path.normcase(str(resolved_root))
+        resolved_path.relative_to(resolved_root)
         return True
     except (OSError, ValueError):
         return False
@@ -372,10 +406,17 @@ def _file_stat(path: Path) -> dict[str, Any]:
             "readable": False,
             "error": str(exc),
         }
+    readable = False
+    try:
+        with path.open("rb"):
+            readable = True
+    except OSError:
+        # Windows ACL 下 os.access 不可靠；open 失败再回退 access
+        readable = os.access(path, os.R_OK)
     return {
         "path": str(path),
         "exists": True,
-        "readable": os.access(path, os.R_OK),
+        "readable": readable,
         "size": stat.st_size,
         "mtime": stat.st_mtime,
     }
@@ -720,14 +761,14 @@ def _read_cpu_model() -> str:
 def _load_average() -> list[float]:
     try:
         return [round(item, 3) for item in os.getloadavg()]
-    except OSError:
+    except (OSError, AttributeError):
         return []
 
 
 def _disk_usage(path: Path) -> dict[str, Any]:
     target = path
     if not target.exists():
-        target = Path("/")
+        target = _system_drive_root()
     try:
         usage = shutil.disk_usage(target)
     except OSError as exc:
@@ -806,6 +847,181 @@ def _interface_addresses() -> dict[str, list[str]]:
     return addresses
 
 
+def _is_loopback_iface(name: str, *, is_loopback: bool | None = None) -> bool:
+    if is_loopback is True:
+        return True
+    text = str(name or "").strip().lower()
+    if not text:
+        return False
+    if text in {"lo", "lo0"}:
+        return True
+    return text.startswith("loopback")
+
+
+def _psutil_available() -> bool:
+    return psutil is not None
+
+
+def _collect_memory_portable() -> dict[str, Any]:
+    """非 Linux：优先 psutil，否则返回空指标。"""
+    empty = {
+        "total": 0,
+        "available": 0,
+        "used": 0,
+        "percent": 0.0,
+        "swap_total": 0,
+        "swap_used": 0,
+        "swap_percent": 0.0,
+    }
+    if not _psutil_available():
+        return empty
+    try:
+        vm = psutil.virtual_memory()
+        swap = psutil.swap_memory()
+        return {
+            "total": int(vm.total),
+            "available": int(vm.available),
+            "used": int(vm.used),
+            "percent": round(float(vm.percent), 2),
+            "swap_total": int(swap.total),
+            "swap_used": int(swap.used),
+            "swap_percent": round(float(swap.percent), 2) if swap.total else 0.0,
+        }
+    except Exception:
+        return empty
+
+
+def _collect_boot_seconds_portable() -> float:
+    if not _psutil_available():
+        return 0.0
+    try:
+        boot = float(psutil.boot_time())
+        if boot > 0:
+            return max(0.0, time.time() - boot)
+    except Exception:
+        return 0.0
+    return 0.0
+
+
+def _collect_cpu_percent_portable(last_sample: float | None) -> tuple[float | None, float | None]:
+    """
+    返回 (percent, next_sample_marker)。
+    psutil.cpu_percent(interval=None) 需连续采样；首次常为 0，可返回 None。
+    """
+    if not _psutil_available():
+        return None, last_sample
+    try:
+        value = float(psutil.cpu_percent(interval=None))
+        # 首次调用通常返回 0.0，不当作真实负载
+        if last_sample is None and value == 0.0:
+            return None, 0.0
+        return round(max(0.0, min(100.0, value)), 2), value
+    except Exception:
+        return None, last_sample
+
+
+def _collect_process_info_portable(*, compact: bool = False) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "pid": os.getpid(),
+        "ppid": os.getppid(),
+        "rss": 0,
+        "vms": 0,
+        "threads": 0,
+        "max_rss": 0,
+        "plugin_uptime_seconds": 0,
+    }
+    if _psutil_available():
+        try:
+            proc = psutil.Process()
+            mem = proc.memory_info()
+            result["rss"] = int(getattr(mem, "rss", 0) or 0)
+            result["vms"] = int(getattr(mem, "vms", 0) or 0)
+            result["threads"] = int(proc.num_threads())
+            try:
+                result["ppid"] = int(proc.ppid())
+            except Exception:
+                pass
+            if not compact:
+                try:
+                    cmdline_parts = proc.cmdline() or []
+                    cmdline = " ".join(str(part) for part in cmdline_parts).strip()
+                    result["cmdline"] = str(_redact(cmdline))
+                except Exception:
+                    result["cmdline"] = ""
+                try:
+                    result["cwd"] = str(proc.cwd())
+                except Exception:
+                    result["cwd"] = ""
+                try:
+                    result["open_fds"] = int(proc.num_handles()) if _is_windows() else int(proc.num_fds())
+                except Exception:
+                    result["open_fds"] = 0
+        except Exception:
+            pass
+    return result
+
+
+def _collect_network_info_portable(*, compact: bool = False) -> dict[str, Any]:
+    if not _psutil_available():
+        return {"interfaces": [], "source": "unavailable"}
+    try:
+        addrs = psutil.net_if_addrs() or {}
+        stats = psutil.net_if_stats() or {}
+        counters = psutil.net_io_counters(pernic=True) or {}
+    except Exception:
+        return {"interfaces": [], "source": "error"}
+
+    interfaces: list[dict[str, Any]] = []
+    for name in sorted(addrs.keys(), key=lambda item: str(item).lower()):
+        addr_list: list[str] = []
+        for entry in addrs.get(name) or []:
+            family = getattr(entry, "family", None)
+            address = getattr(entry, "address", None)
+            if not address:
+                continue
+            # 跳过 MAC 类链路地址，优先 IPv4/IPv6
+            family_name = str(getattr(family, "name", family) or "")
+            if family_name in {"AF_LINK", "AF_PACKET"}:
+                continue
+            if ":" in str(address) and "." not in str(address):
+                # IPv6 可能带 %iface 后缀
+                addr_list.append(str(address).split("%", 1)[0])
+            else:
+                addr_list.append(str(address))
+        # 去重保序
+        seen: set[str] = set()
+        unique_addrs: list[str] = []
+        for item in addr_list:
+            if item in seen:
+                continue
+            seen.add(item)
+            unique_addrs.append(item)
+
+        st = stats.get(name)
+        is_up = bool(getattr(st, "isup", False)) if st is not None else False
+        is_loop = bool(getattr(st, "isloopback", False)) if st is not None and hasattr(st, "isloopback") else _is_loopback_iface(name)
+        counter = counters.get(name)
+        item: dict[str, Any] = {
+            "name": name,
+            "state": "up" if is_up else "down",
+            "addresses": unique_addrs,
+            "is_loopback": is_loop,
+        }
+        if counter is not None:
+            item["rx_bytes"] = int(getattr(counter, "bytes_recv", 0) or 0)
+            item["tx_bytes"] = int(getattr(counter, "bytes_sent", 0) or 0)
+            if not compact:
+                item["rx_packets"] = int(getattr(counter, "packets_recv", 0) or 0)
+                item["tx_packets"] = int(getattr(counter, "packets_sent", 0) or 0)
+        if not compact and st is not None:
+            item["mtu"] = int(getattr(st, "mtu", 0) or 0)
+            speed = int(getattr(st, "speed", 0) or 0)
+            item["speed_mbps"] = speed if speed > 0 else 0
+            item["mac"] = ""
+        interfaces.append(item)
+    return {"interfaces": interfaces, "source": "psutil"}
+
+
 @register(
     PLUGIN_NAME,
     "nuoxiaomiao",
@@ -824,11 +1040,19 @@ class ObserverPanelPlugin(Star):
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
         self._last_cpu_times: tuple[int, int] | None = _read_cpu_times()
+        self._last_cpu_percent_sample: float | None = None
         self._cpu_lock = threading.Lock()
         self._log_tail_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
         self._log_stats_cache: dict[str, Any] = {}
         self._started_at = time.time()
         self._system_cache: dict[str, Any] = {}
+        # 预热 psutil CPU 采样（非阻塞 interval=None）
+        if not _is_linux() and _psutil_available():
+            try:
+                psutil.cpu_percent(interval=None)
+                self._last_cpu_percent_sample = 0.0
+            except Exception:
+                pass
 
     async def initialize(self) -> None:
         if not self._cfg_bool("enabled", True):
@@ -1430,6 +1654,14 @@ class ObserverPanelPlugin(Star):
         elif not self._cfg_str("access_token", "").strip():
             add("info", "未配置访问令牌", "当前仅依赖绑定地址保护面板，同机其他进程/用户仍可能访问。", "security")
 
+        if not _is_linux() and not _psutil_available():
+            add(
+                "info",
+                "系统指标能力有限",
+                "当前非 Linux 环境且未安装 psutil，CPU/内存/网卡等主机指标可能为空。建议安装 psutil 后重启。",
+                "system",
+            )
+
         platforms = astrbot.get("platforms") or {}
         if int(platforms.get("total") or 0) <= 0:
             add("warn", "未检测到消息平台", "运行时和配置中都没有可展示的消息平台。", "astrbot")
@@ -1482,35 +1714,55 @@ class ObserverPanelPlugin(Star):
         }
 
     def _collect_system(self, *, compact: bool = False) -> dict[str, Any]:
-        cpu_now = _read_cpu_times()
         cpu_percent: float | None = None
-        # _collect_system 通过 asyncio.to_thread 在线程池执行，/api/summary 与
-        # /api/system 可能并发调用，需用锁保护 _last_cpu_times 的读改写，避免
-        # 并发采样导致 delta≈0（CPU 显示 0%）或超界被 clamp 到 100%。
-        with self._cpu_lock:
-            if cpu_now and self._last_cpu_times:
-                total_delta = cpu_now[0] - self._last_cpu_times[0]
-                idle_delta = cpu_now[1] - self._last_cpu_times[1]
-                if total_delta > 0:
-                    cpu_percent = round(max(0.0, min(100.0, (1 - idle_delta / total_delta) * 100)), 2)
-            if cpu_now:
-                self._last_cpu_times = cpu_now
+        cpu_model = _read_cpu_model() or platform.processor()
 
-        mem = _read_proc_key_values(Path("/proc/meminfo"))
-        total_mem = _kib_value(mem.get("MemTotal"))
-        available_mem = _kib_value(mem.get("MemAvailable")) or _kib_value(mem.get("MemFree"))
-        used_mem = max(0, total_mem - available_mem)
-        swap_total = _kib_value(mem.get("SwapTotal"))
-        swap_free = _kib_value(mem.get("SwapFree"))
-        swap_used = max(0, swap_total - swap_free)
+        if _is_linux():
+            cpu_now = _read_cpu_times()
+            # _collect_system 通过 asyncio.to_thread 在线程池执行，/api/summary 与
+            # /api/system 可能并发调用，需用锁保护 _last_cpu_times 的读改写，避免
+            # 并发采样导致 delta≈0（CPU 显示 0%）或超界被 clamp 到 100%。
+            with self._cpu_lock:
+                if cpu_now and self._last_cpu_times:
+                    total_delta = cpu_now[0] - self._last_cpu_times[0]
+                    idle_delta = cpu_now[1] - self._last_cpu_times[1]
+                    if total_delta > 0:
+                        cpu_percent = round(max(0.0, min(100.0, (1 - idle_delta / total_delta) * 100)), 2)
+                if cpu_now:
+                    self._last_cpu_times = cpu_now
 
-        boot_seconds = 0.0
-        try:
-            boot_seconds = float(Path("/proc/uptime").read_text(encoding="utf-8").split()[0])
-        except (OSError, ValueError, IndexError):
-            pass
+            mem = _read_proc_key_values(Path("/proc/meminfo"))
+            total_mem = _kib_value(mem.get("MemTotal"))
+            available_mem = _kib_value(mem.get("MemAvailable")) or _kib_value(mem.get("MemFree"))
+            used_mem = max(0, total_mem - available_mem)
+            swap_total = _kib_value(mem.get("SwapTotal"))
+            swap_free = _kib_value(mem.get("SwapFree"))
+            swap_used = max(0, swap_total - swap_free)
+            memory = {
+                "total": total_mem,
+                "available": available_mem,
+                "used": used_mem,
+                "percent": round((used_mem / total_mem) * 100, 2) if total_mem else 0,
+                "swap_total": swap_total,
+                "swap_used": swap_used,
+                "swap_percent": round((swap_used / swap_total) * 100, 2) if swap_total else 0,
+            }
 
-        root_disk = _disk_usage(Path("/"))
+            boot_seconds = 0.0
+            try:
+                boot_seconds = float(Path("/proc/uptime").read_text(encoding="utf-8").split()[0])
+            except (OSError, ValueError, IndexError):
+                pass
+            root_disk = _disk_usage(Path("/"))
+        else:
+            with self._cpu_lock:
+                cpu_percent, self._last_cpu_percent_sample = _collect_cpu_percent_portable(
+                    self._last_cpu_percent_sample
+                )
+            memory = _collect_memory_portable()
+            boot_seconds = _collect_boot_seconds_portable()
+            root_disk = _disk_usage(_system_drive_root())
+
         data_disk = _disk_usage(self.data_dir)
         process = self._collect_process_info(compact=compact)
         network = self._collect_network_info(compact=compact)
@@ -1526,20 +1778,12 @@ class ObserverPanelPlugin(Star):
                 "uptime_seconds": boot_seconds,
             },
             "cpu": {
-                "model": _read_cpu_model() or platform.processor(),
+                "model": cpu_model,
                 "logical_count": os.cpu_count() or 0,
                 "load_average": _load_average(),
                 "percent": cpu_percent,
             },
-            "memory": {
-                "total": total_mem,
-                "available": available_mem,
-                "used": used_mem,
-                "percent": round((used_mem / total_mem) * 100, 2) if total_mem else 0,
-                "swap_total": swap_total,
-                "swap_used": swap_used,
-                "swap_percent": round((swap_used / swap_total) * 100, 2) if swap_total else 0,
-            },
+            "memory": memory,
             "disks": [
                 root_disk,
                 data_disk,
@@ -1551,50 +1795,62 @@ class ObserverPanelPlugin(Star):
                 "implementation": platform.python_implementation(),
                 "executable": sys.executable,
             },
+            "metrics_backend": "linux-proc" if _is_linux() else ("psutil" if _psutil_available() else "limited"),
         }
         if compact:
             system["network"] = {
                 "interfaces": [
                     item for item in network.get("interfaces", [])
-                    if item.get("name") != "lo" and (item.get("addresses") or item.get("state") == "up")
+                    if not _is_loopback_iface(str(item.get("name") or ""), is_loopback=item.get("is_loopback"))
+                    and (item.get("addresses") or item.get("state") == "up")
                 ][:6]
             }
         return system
 
     def _collect_process_info(self, *, compact: bool = False) -> dict[str, Any]:
-        status = _read_proc_key_values(Path("/proc/self/status"))
-        result = {
-            "pid": os.getpid(),
-            "ppid": os.getppid(),
-            "rss": _kib_value(status.get("VmRSS")),
-            "vms": _kib_value(status.get("VmSize")),
-            "threads": _as_int(status.get("Threads"), 0),
-            "max_rss": (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024) if resource else 0,
-            "plugin_uptime_seconds": round(time.time() - self._started_at, 3),
-        }
-        if compact:
-            # 精简模式：省略长字符串字段与 fd 计数，减少传输与噪音
+        if _is_linux():
+            status = _read_proc_key_values(Path("/proc/self/status"))
+            result = {
+                "pid": os.getpid(),
+                "ppid": os.getppid(),
+                "rss": _kib_value(status.get("VmRSS")),
+                "vms": _kib_value(status.get("VmSize")),
+                "threads": _as_int(status.get("Threads"), 0),
+                "max_rss": (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024) if resource else 0,
+                "plugin_uptime_seconds": round(time.time() - self._started_at, 3),
+            }
+            if compact:
+                return result
+            cmdline = _read_text_sync(Path("/proc/self/cmdline")).replace("\x00", " ").strip()
+            fd_count = 0
+            try:
+                fd_count = len(list(Path("/proc/self/fd").iterdir()))
+            except OSError:
+                pass
+            try:
+                cwd = str(Path("/proc/self/cwd").resolve())
+            except OSError:
+                cwd = ""
+            result["cmdline"] = str(_redact(cmdline))
+            result["cwd"] = cwd
+            result["open_fds"] = fd_count
             return result
-        if not _is_linux():
-            return result
-        cmdline = _read_text_sync(Path("/proc/self/cmdline")).replace("\x00", " ").strip()
-        fd_count = 0
-        try:
-            fd_count = len(list(Path("/proc/self/fd").iterdir()))
-        except OSError:
-            pass
-        try:
-            cwd = str(Path("/proc/self/cwd").resolve())
-        except OSError:
-            cwd = ""
-        result["cmdline"] = str(_redact(cmdline))
-        result["cwd"] = cwd
-        result["open_fds"] = fd_count
+
+        result = _collect_process_info_portable(compact=compact)
+        result["plugin_uptime_seconds"] = round(time.time() - self._started_at, 3)
+        if resource:
+            try:
+                # Windows 上 ru_maxrss 单位是字节；Linux 是 KB。仅 Linux 路径用 *1024。
+                # 非 Linux 若 resource 存在（罕见），保持原值。
+                usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                result["max_rss"] = int(usage) if _is_windows() else int(usage) * 1024
+            except Exception:
+                result["max_rss"] = 0
         return result
 
     def _collect_network_info(self, *, compact: bool = False) -> dict[str, Any]:
         if not _is_linux():
-            return {"interfaces": []}
+            return _collect_network_info_portable(compact=compact)
         counters = _network_counters()
         addresses = _interface_addresses()
         interfaces: list[dict[str, Any]] = []
@@ -1604,6 +1860,7 @@ class ObserverPanelPlugin(Star):
                 "name": name,
                 "state": _read_text_sync(path / "operstate") or "unknown",
                 "addresses": addresses.get(name, []),
+                "is_loopback": _is_loopback_iface(name),
                 **counters.get(name, {}),
             }
             if compact:
@@ -1615,7 +1872,7 @@ class ObserverPanelPlugin(Star):
                 item["mac"] = _read_text_sync(path / "address")
                 item["speed_mbps"] = _as_int(_read_text_sync(path / "speed"), 0)
             interfaces.append(item)
-        return {"interfaces": interfaces}
+        return {"interfaces": interfaces, "source": "linux-sysfs"}
 
     async def _collect_astrbot_logs(self, *, cursor: dict[str, dict[str, Any]] | None = None) -> list[dict[str, Any]]:
         max_lines = self._astrbot_cfg_int("tail_lines", 300, 1, 3000)
@@ -1631,7 +1888,7 @@ class ObserverPanelPlugin(Star):
                     max_bytes=max_bytes,
                     max_lines=max_lines,
                     redact=redact,
-                    cursor=cursor.get(str(path)),
+                    cursor=cursor.get(str(path)) or cursor.get(_normalize_path_key(path)),
                 )
                 for path in paths
             ]
@@ -1645,8 +1902,32 @@ class ObserverPanelPlugin(Star):
             return [_apply_privacy_to_log_payload(item, privacy=True) for item in results]
         return list(results)
 
+    def _resolve_logs_dir(self, configured: str) -> Path:
+        """
+        解析 logs_dir：
+        绝对路径直接用；相对路径按候选存在性选择，兼容 Windows 不同启动 CWD。
+        """
+        raw = Path(str(configured or "data/logs")).expanduser()
+        if raw.is_absolute():
+            return raw
+
+        candidates = [
+            Path.cwd() / raw,
+            self.data_dir.parent / raw,
+            self.data_dir / "logs",
+            raw,
+        ]
+        for candidate in candidates:
+            try:
+                if candidate.exists() and candidate.is_dir():
+                    return candidate
+            except OSError:
+                continue
+        # 都不存在时优先 data_dir 父级（AstrBot 常见 data/logs）
+        return self.data_dir.parent / raw
+
     def _astrbot_log_paths(self) -> list[Path]:
-        logs_dir = Path(self._astrbot_cfg_str("logs_dir", "data/logs")).expanduser()
+        logs_dir = self._resolve_logs_dir(self._astrbot_cfg_str("logs_dir", "data/logs"))
         try:
             logs_root = logs_dir.resolve()
         except OSError:
@@ -1664,7 +1945,10 @@ class ObserverPanelPlugin(Star):
             if not _path_is_within(path, logs_root):
                 logger.warning("[ObserverPanel] 拒绝越界日志路径: %s (root=%s)", path, logs_root)
                 continue
-            paths.append(path)
+            try:
+                paths.append(path.resolve())
+            except OSError:
+                paths.append(path)
         return paths
 
     def _public_config(self) -> dict[str, Any]:
