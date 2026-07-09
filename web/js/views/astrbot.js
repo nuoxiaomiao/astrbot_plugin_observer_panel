@@ -2,13 +2,13 @@
 // 视图 - AstrBot
 // ============================================================================
 
-import { state } from "../state.js?v=20260709-mobile1";
-import { MODULE_CHART_LIMIT } from "../config.js?v=20260709-mobile1";
+import { state } from "../state.js?v=20260709-mobile2";
+import { MODULE_CHART_LIMIT } from "../config.js?v=20260709-mobile2";
 import {
   formatTime,
   formatNumber,
   formatCompactLogTime,
-} from "../utils/format.js?v=20260709-mobile1";
+} from "../utils/format.js?v=20260709-mobile2";
 import {
   $,
   setText,
@@ -18,17 +18,17 @@ import {
   badge,
   bindDetailsState,
   detailKey,
-} from "../utils/dom.js?v=20260709-mobile1";
-import { compactJson, compactText } from "../utils/log-text.js?v=20260709-mobile1";
-import { renderBarChart } from "../components/chart.js?v=20260709-mobile1";
-import { focusLogEntry } from "../components/log-list.js?v=20260709-mobile1";
+} from "../utils/dom.js?v=20260709-mobile2";
+import { compactJson, compactText } from "../utils/log-text.js?v=20260709-mobile2";
+import { renderBarChart } from "../components/chart.js?v=20260709-mobile2";
+import { focusLogEntry } from "../components/log-list.js?v=20260709-mobile2";
 import {
   countBy,
   aggregateModuleGroups,
   eventTypeLabel,
   eventTypeClass,
   sessionSourceLabel,
-} from "../log/analytics.js?v=20260709-mobile1";
+} from "../log/analytics.js?v=20260709-mobile2";
 
 export function functionCard(title, value, meta, kind = "") {
   const item = document.createElement("article");
@@ -1261,6 +1261,32 @@ function patchSessionOverview(section, session) {
   });
 }
 
+function clearSessionDetailEnter(host) {
+  if (!host) return;
+  if (host._enterTimer) {
+    window.clearTimeout(host._enterTimer);
+    host._enterTimer = null;
+  }
+  host.classList.remove("is-session-enter");
+}
+
+/**
+ * 跨会话切换时播放详情入场动画（同会话 patch 不调用）。
+ * 与事件详情 detail-enter 同构：reflow 后打标，结束后去类以免干扰 live 动效。
+ */
+function playSessionDetailEnter(host) {
+  if (!host) return;
+  if (document.body.classList.contains("anim-off")) return;
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+  clearSessionDetailEnter(host);
+  void host.offsetWidth;
+  host.classList.add("is-session-enter");
+  host._enterTimer = window.setTimeout(() => {
+    host.classList.remove("is-session-enter");
+    host._enterTimer = null;
+  }, 250);
+}
+
 function renderSessionDetail(session, insights) {
   const detail = renderSignature("sessionDetail", sessionDetailSignature(session));
   const host = $("sessionDetail");
@@ -1273,8 +1299,8 @@ function renderSessionDetail(session, insights) {
     host.classList.remove("session-detail-live", "is-generating", "is-running");
     host.dataset.currentSpanId = "";
     host.dataset.liveMode = "";
-    // 清理可能存在的定时器
     cleanupLiveTimers(host);
+    clearSessionDetailEnter(host);
     if (detail) {
       host.innerHTML = "";
       host.appendChild(emptyBlock("选择一条有效会话后，这里会显示消息、回复、工具调用和阶段时间线。"));
@@ -1290,8 +1316,8 @@ function renderSessionDetail(session, insights) {
   const hasLiveCard = Boolean(host.querySelector(".session-live-card"));
 
   if (!sameSession) {
-    // 切换会话时清理旧会话的定时器
     cleanupLiveTimers(host);
+    clearSessionDetailEnter(host);
     host.dataset.currentSpanId = session.spanId || "";
   }
 
@@ -1311,6 +1337,7 @@ function renderSessionDetail(session, insights) {
       liveWrap.append(liveTitle, liveCard);
       journey.append(liveWrap);
       host.appendChild(journey);
+      if (!sameSession) playSessionDetailEnter(host);
       return;
     }
 
@@ -1341,6 +1368,7 @@ function renderSessionDetail(session, insights) {
 
     journey.append(flowWrap);
     host.appendChild(journey);
+    if (!sameSession) playSessionDetailEnter(host);
     return;
   }
 

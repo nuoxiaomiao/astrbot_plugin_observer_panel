@@ -457,6 +457,29 @@
   gap: 14px;
 }
 
+/* 跨会话切换：详情入场（对齐事件详情 detail-enter，只动 opacity/transform） */
+.session-detail.is-session-enter .session-journey {
+  animation: viewFadeIn var(--motion-view-duration, 0.22s) var(--ease-out) both;
+}
+
+.session-detail.is-session-enter .session-overview-card {
+  animation: fadeInUp 0.28s var(--ease-out) backwards;
+  animation-delay: 0.02s;
+}
+
+.session-detail.is-session-enter .session-live-wrap,
+.session-detail.is-session-enter .session-flow-wrap {
+  animation: fadeInUp 0.28s var(--ease-out) backwards;
+  animation-delay: 0.07s;
+}
+
+body.anim-off .session-detail.is-session-enter .session-journey,
+body.anim-off .session-detail.is-session-enter .session-overview-card,
+body.anim-off .session-detail.is-session-enter .session-live-wrap,
+body.anim-off .session-detail.is-session-enter .session-flow-wrap {
+  animation: none;
+}
+
 /* live→complete 切换：live 卡片淡出 / flow 区域淡入 */
 .session-live-wrap,
 .session-flow-wrap {
@@ -1462,6 +1485,12 @@
   .session-live-wrap::before,
   .session-live-scan::before,
   .session-overview-card.is-live::after {
+    animation: none !important;
+  }
+  .session-detail.is-session-enter .session-journey,
+  .session-detail.is-session-enter .session-overview-card,
+  .session-detail.is-session-enter .session-live-wrap,
+  .session-detail.is-session-enter .session-flow-wrap {
     animation: none !important;
   }
   .session-card.is-live::after,
