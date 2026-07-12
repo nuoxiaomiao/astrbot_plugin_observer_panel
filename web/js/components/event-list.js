@@ -2,9 +2,9 @@
 // 组件 - 事件列表
 // ============================================================================
 
-import { state } from "../state.js?v=20260709-mobile2";
-import { IMPORTANT_EVENT_TYPES } from "../config.js?v=20260709-mobile2";
-import { formatTime, formatCompactLogTime } from "../utils/format.js?v=20260709-mobile2";
+import { state } from "../state.js?v=20260709-stream4";
+import { IMPORTANT_EVENT_TYPES } from "../config.js?v=20260709-stream4";
+import { formatTime, formatCompactLogTime } from "../utils/format.js?v=20260709-stream4";
 import {
   $,
   setText,
@@ -18,7 +18,7 @@ import {
   pruneOpenDetails,
   eventChainDetailKey,
   renderRawLogBlock,
-} from "../utils/dom.js?v=20260709-mobile2";
+} from "../utils/dom.js?v=20260709-stream4";
 import {
   eventTypeLabel,
   eventTypeBadge,
@@ -26,8 +26,8 @@ import {
   confidenceLabel,
   eventDurationLabel,
   evidenceDetailKey,
-} from "../log/analytics.js?v=20260709-mobile2";
-import { focusLogEntry } from "./log-list.js?v=20260709-mobile2";
+} from "../log/analytics.js?v=20260709-stream4";
+import { focusLogEntry } from "./log-list.js?v=20260709-stream4";
 
 let renderLogsRef = () => {};
 
@@ -144,11 +144,7 @@ export function selectImportantEvent(eventId) {
     });
   }
   renderDetailPanel(true);
-  // 平板抽屉断点（≤1400px 且非手机内联区）下，选中事件时滑出详情抽屉
-  if (state.selectedEventId && window.matchMedia("(max-width: 1400px) and (min-width: 981px)").matches) {
-    document.querySelector(".workspace-detail")?.classList.add("open");
-    document.body.classList.add("detail-open");
-  }
+  // 平板/桌面详情列为常驻网格列，选中事件只更新内容，不再滑出抽屉
 }
 
 export function renderDetailPanel(animate = false) {

@@ -1,5 +1,42 @@
 # 更新日志
 
+## v0.4.4 - WebUI 评审修复 (2026-07-12)
+
+### Critical
+- 修复骨架屏 `removeLoadingState` 用旧 HTML 覆盖刚渲染数据的问题。
+- 登录 Cookie 改为随机 session id（不再写入 `access_token` 明文）；兼容旧密码 Cookie / `?token=` 自动升级。
+
+### High
+- 登录按 IP 限流（5 分钟窗口）。
+- 错误 query token 不再覆盖有效 Cookie。
+- 鉴权探测网络失败不再误进面板。
+- `focusLogEntry` 软切 Tab，避免断 SSE / 强制全量刷新。
+- 用户日志正则长度与嵌套量词防护（ReDoS）。
+- SSE `connecting` 阶段跳过 HTTP 拉 logs。
+
+### UX
+- Tab `id` 与 `aria-labelledby` 对齐；metric `role="button"`。
+- ≤980px 侧栏改为抽屉 + 汉堡菜单。
+- 补齐骨架屏 / 快捷键浮层样式；登录页对齐遥测直角风格。
+- toast z-index 提高；token 补 `--ok/--bad/--panel/--border` 别名。
+
+---
+
+## v0.4.3 - File-SSE 日志流重新接入 (2026-07-09)
+
+### 日志实时推送
+- 新增 `GET /api/logs/stream`（SSE）：周期文件 incremental tail，事件体与 `/api/logs` 同形状 `{ astrbot: [...] }`。
+- `/api/logs` 固定文件形状，禁止再切到 `{ live }`，避免历史混用导致丢行/重复。
+- 前端 EventSource 接入：`mergeLogData` 唯一写入；SSE 在线时停止日志 HTTP 轮询，断开后自动降级。
+- 首屏策略：先 `/api/logs` 文件基线展示，延迟约 `refreshMs`（默认 5s）再连 SSE；默认 `snapshot=0`，避免二次全量扫盘。
+- 主 Tab 切页：切到 `overview` / `astrbot` / `logs` 时走 `rearmFileBaselineThenStream`（断 SSE → 强制文件读 → 左侧状态 pending → ~5s 再增量 SSE）；**切到 `system` 不 rearm**，只刷系统数据并保持已有日志流。快速连点只保留最后一次 timer。
+- 左侧 `#sidebarStatusText` 实时展示文件/流模式文案与点色，避免被「在线 · 时间」覆盖。
+- 会话列表：pre-agent 卡在检测到同句 agent 孪生后立即隐藏，避免「唤醒检查」与「请求模型」两张卡并存。
+- 可选 LogBroker fan-in（`runtime:logbroker` 虚拟路径），探测失败静默，不影响文件 SSE。
+- 配置项 `log_stream.enabled` / `interval_ms` / `prefer_logbroker`；health/config 暴露 `log_stream_*` 与 `log_broker_*`。
+
+---
+
 ## v0.4.2 - 实时对话动效第二档 (2026-06-25)
 
 ### 实时会话（AstrBot → 会话）

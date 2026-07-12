@@ -2,7 +2,7 @@
 // 工具函数 - DOM 操作 / UI 辅助
 // ============================================================================
 
-import { state } from "../state.js?v=20260709-mobile2";
+import { state } from "../state.js?v=20260709-stream4";
 import {
   DEFAULT_RUNNING_TIMEOUT_MS,
   DEFAULT_SLOW_SESSION_MS,
@@ -10,8 +10,8 @@ import {
   DEFAULT_IMPORTANT_EVENT_LIMIT,
   DEFAULT_LOG_PAGE_SIZE,
   DEFAULT_RAW_CLIP_LENGTH,
-} from "../config.js?v=20260709-mobile2";
-import { formatCompactLogTime, clampNumber, boolValue } from "./format.js?v=20260709-mobile2";
+} from "../config.js?v=20260709-stream4";
+import { formatCompactLogTime, clampNumber, boolValue } from "./format.js?v=20260709-stream4";
 
 export function $(id) {
   return document.getElementById(id);
@@ -512,8 +512,56 @@ export function renderWorkspaceChrome() {
   const [title, meta] = titles[state.activeTab] || titles.overview;
   setText("workspaceTitle", title);
   setText("workspaceMeta", meta);
-  setText("sidebarStatusText", `AstrBot 在线 · ${formatCompactLogTime({ timestamp: Date.now() })}`);
-  if (state.activeTab !== "logs") {
-    // detail panel is rendered by caller when needed
+
+  // 有 logStream 状态时优先流/文件模式文案，不无条件盖回「在线 · 时间」
+  const streamStatus = state.logStream?.status || "idle";
+  const statusRoot = document.querySelector(".sidebar-status");
+  if (statusRoot) {
+    statusRoot.dataset.logStreamStatus = streamStatus;
+  }
+
+  const preferStreamLabel = [
+    "pending",
+    "connecting",
+    "connected",
+    "streaming",
+    "reconnecting",
+    "degraded",
+    "disabled",
+    "stopped",
+  ].includes(streamStatus);
+
+  if (preferStreamLabel) {
+    const broker = state.config?.log_broker_enabled ? " · LogBroker" : "";
+    let label;
+    switch (streamStatus) {
+      case "pending":
+        label = state.logStream?.detail || "文件读取 · 稍后接入实时流";
+        break;
+      case "connecting":
+        label = "日志流连接中…";
+        break;
+      case "reconnecting":
+        label = state.logStream?.detail || "日志流重连中…";
+        break;
+      case "connected":
+      case "streaming":
+        label = `实时日志流${broker}`;
+        break;
+      case "degraded":
+        label = "文件轮询（流已降级）";
+        break;
+      case "disabled":
+        label = "文件轮询（流已关闭）";
+        break;
+      case "stopped":
+        label = "文件轮询模式";
+        break;
+      default:
+        label = "文件轮询模式";
+    }
+    setText("sidebarStatusText", label);
+  } else {
+    setText("sidebarStatusText", `AstrBot 在线 · ${formatCompactLogTime({ timestamp: Date.now() })}`);
   }
 }

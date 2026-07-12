@@ -2,7 +2,7 @@
 // 组件 - 仪表盘（增量更新版）
 // ============================================================================
 
-import { formatPercent, usageKind } from "../utils/format.js?v=20260709-mobile2";
+import { formatPercent, usageKind } from "../utils/format.js?v=20260709-stream4";
 
 /**
  * 渲染/更新资源使用率仪表盘（增量 DOM 复用）

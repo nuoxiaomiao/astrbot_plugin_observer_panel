@@ -276,8 +276,8 @@ async function main() {
     assert(a.reasoningSource === "plain", `A source=${a?.reasoningSource}`);
   });
 
-  // --- attach: multi-candidate, no response text → nearest when well separated ---
-  run("multi candidate without response → nearest when separated", () => {
+  // --- attach: multi-candidate, no response text → 严格弃绑（避免并发 empty 错挂） ---
+  run("multi candidate without response → skip bind", () => {
     const t0 = 1_720_000_000_000;
     const entries = [
       prepareTraceEntry({ id: "p3", spanId: "span-c", timestamp: t0, messageOutline: "empty-resp" }),
@@ -305,7 +305,7 @@ async function main() {
     const insights = buildTraceInsights(entries);
     const session = (insights.allTraceSessions || []).find((s) => s.spanId === "span-c");
     assert(session?.status === "complete", "session complete");
-    assert(session.reasoningContent === "近的思考", `got=${session?.reasoningContent}`);
+    assert(!session.reasoningContent, `empty multi-candidate must skip, got=${session?.reasoningContent}`);
   });
 
   // --- attach: multi-candidate empty response too close → skip ---
@@ -339,6 +339,121 @@ async function main() {
     const session = (insights.allTraceSessions || []).find((s) => s.spanId === "span-c2");
     assert(session?.status === "complete", "session complete");
     assert(!session.reasoningContent, `should skip ambiguous bind, got=${session?.reasoningContent}`);
+  });
+
+  // --- attach: shared long prefix must not cross-bind ---
+  run("shared response substring must not cross-bind", () => {
+    const t0 = 1_722_000_000_000;
+    const shared = "这是一段足够长的公共前缀用于误匹配测试";
+    const entries = [
+      prepareTraceEntry({ id: "p-x", spanId: "span-x", timestamp: t0, messageOutline: "qx" }),
+      completeTraceEntry({
+        id: "c-x",
+        spanId: "span-x",
+        timestamp: t0 + 4000,
+        response: `${shared}会话X的尾部专属内容AAA`,
+        messageOutline: "qx",
+      }),
+      prepareTraceEntry({ id: "p-y", spanId: "span-y", timestamp: t0 + 500, messageOutline: "qy" }),
+      completeTraceEntry({
+        id: "c-y",
+        spanId: "span-y",
+        timestamp: t0 + 4500,
+        response: `${shared}会话Y的尾部专属内容BBB`,
+        messageOutline: "qy",
+      }),
+      plainEntry({
+        id: "r-x",
+        timestamp: t0 + 3900,
+        raw: `completion: ChatCompletion(id='cx', content='${shared}会话X的尾部专属内容AAA', reasoning_content='思考X')`,
+      }),
+      plainEntry({
+        id: "r-y",
+        timestamp: t0 + 4400,
+        raw: `completion: ChatCompletion(id='cy', content='${shared}会话Y的尾部专属内容BBB', reasoning_content='思考Y')`,
+      }),
+    ];
+    entries.forEach((entry, index) => {
+      entry.globalIndex = index;
+    });
+    const insights = buildTraceInsights(entries);
+    const bySpan = new Map((insights.allTraceSessions || []).map((s) => [s.spanId, s]));
+    const x = bySpan.get("span-x");
+    const y = bySpan.get("span-y");
+    assert(x?.reasoningContent === "思考X", `X got=${x?.reasoningContent}`);
+    assert(y?.reasoningContent === "思考Y", `Y got=${y?.reasoningContent}`);
+  });
+
+  // --- sticky: dump 离开窗口后 rebuild 仍保留 ---
+  run("sticky keeps reasoning after plain dump leaves window", async () => {
+    const { clearReasoningSticky } = await importBrowserModule("web/js/log/reasoning-cache.js");
+    clearReasoningSticky();
+    const t0 = 1_723_000_000_000;
+    const base = [
+      prepareTraceEntry({ id: "p-st", spanId: "span-sticky", timestamp: t0 }),
+      completeTraceEntry({
+        id: "c-st",
+        spanId: "span-sticky",
+        timestamp: t0 + 3000,
+        response: "sticky 会话回复正文足够长用于匹配",
+      }),
+    ];
+    const withDump = [
+      ...base,
+      plainEntry({
+        id: "r-st",
+        timestamp: t0 + 2900,
+        raw: "completion: ChatCompletion(id='sticky', content='sticky 会话回复正文足够长用于匹配', reasoning_content='应被 sticky 保留的思考')",
+      }),
+    ];
+    withDump.forEach((entry, index) => {
+      entry.globalIndex = index;
+    });
+    const first = buildTraceInsights(withDump);
+    const session1 = (first.allTraceSessions || []).find((s) => s.spanId === "span-sticky");
+    assert(session1?.reasoningContent === "应被 sticky 保留的思考", `first=${session1?.reasoningContent}`);
+
+    // 第二次：只剩 trace，plain dump 已滚出
+    base.forEach((entry, index) => {
+      entry.globalIndex = index;
+    });
+    const second = buildTraceInsights(base);
+    const session2 = (second.allTraceSessions || []).find((s) => s.spanId === "span-sticky");
+    assert(session2?.reasoningContent === "应被 sticky 保留的思考", `second=${session2?.reasoningContent}`);
+    assert(session2?.reasoningSource === "sticky", `source=${session2?.reasoningSource}`);
+    clearReasoningSticky();
+  });
+
+  // --- multi-hit same response different reasoning → abandon ---
+  run("same response multi different reasoning → abandon", () => {
+    const t0 = 1_724_000_000_000;
+    const response = "同一段回复正文足够长用于多命中弃绑";
+    const entries = [
+      prepareTraceEntry({ id: "p-m", spanId: "span-multi", timestamp: t0 }),
+      completeTraceEntry({
+        id: "c-m",
+        spanId: "span-multi",
+        timestamp: t0 + 5000,
+        response,
+      }),
+      plainEntry({
+        id: "r-m1",
+        timestamp: t0 + 4800,
+        raw: `completion: ChatCompletion(id='m1', content='${response}', reasoning_content='思考版本甲')`,
+      }),
+      plainEntry({
+        id: "r-m2",
+        timestamp: t0 + 4900,
+        raw: `completion: ChatCompletion(id='m2', content='${response}', reasoning_content='思考版本乙')`,
+      }),
+    ];
+    entries.forEach((entry, index) => {
+      entry.globalIndex = index;
+    });
+    const insights = buildTraceInsights(entries);
+    const session = (insights.allTraceSessions || []).find((s) => s.spanId === "span-multi");
+    assert(session?.status === "complete", "session complete");
+    assert(!session.reasoningContent, `must abandon multi-hit, got=${session?.reasoningContent}`);
   });
 
   // --- attach: delayed plain log within +30s window ---
@@ -429,7 +544,9 @@ async function main() {
   console.log("Reasoning extract/attach fixture");
   for (const item of cases) {
     try {
-      item.fn();
+      // sticky 等用例可能是 async
+      // eslint-disable-next-line no-await-in-loop
+      await item.fn();
       console.log(`  PASS  ${item.name}`);
       passed += 1;
     } catch (err) {

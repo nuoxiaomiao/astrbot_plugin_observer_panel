@@ -2,7 +2,7 @@
 // 工具函数 - 格式化
 // ============================================================================
 
-import { DIAGNOSTIC_LEVELS } from "../config.js?v=20260709-mobile2";
+import { DIAGNOSTIC_LEVELS } from "../config.js?v=20260709-stream4";
 
 /**
  * 格式化字节大小

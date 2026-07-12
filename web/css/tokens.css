@@ -49,6 +49,12 @@
   --cleanup-bright: #e39a45;
   --success: #5aa06a;
 
+  /* 兼容旧语义别名（状态点/auth 等） */
+  --ok: var(--success);
+  --bad: var(--danger);
+  --panel: var(--surface-2);
+  --border: var(--line);
+
   /* —— 终端磷光绿：仅用于单一元素（侧栏在线状态点）—— */
   --terminal-green: #4af626;
 

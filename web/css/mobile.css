@@ -5,16 +5,9 @@
    目标：详情面板正确呈现（平板抽屉 / 手机内联）、各页统一单列、消除横向溢出。
    ========================================================================== */
 
-/* —— 平板抽屉态（981–1400px）：详情为右侧滑出抽屉，需要关闭按钮 —— */
-@media (min-width: 981px) and (max-width: 1400px) {
-  .detail-close-btn {
-    display: inline-flex;
-  }
-}
-
 /* —— 手机 / 竖屏（≤980px）：详情面板改为内联堆叠在主内容下方，常驻可见 —— */
 @media (max-width: 980px) {
-  /* 复位为普通流内块（撤销 ≤1400 的 fixed 抽屉定位） */
+  /* 复位为普通流内块（撤销遗留 fixed 抽屉定位） */
   .workspace-detail {
     position: static;
     right: auto;
@@ -98,6 +91,16 @@
   /* 小指标卡保留 2 列（信息密度合适、仍可读） */
   .status-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 总览首屏：健康条全宽、资源 2×2（与 overview.css 呼应） */
+  .overview-resource-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .health-strip {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   /* 日志行 / 会话链路 / KV 行 → 单列堆叠 */

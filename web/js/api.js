@@ -2,8 +2,9 @@
 // 工具函数 - 网络请求
 // ============================================================================
 
-import { state } from "./state.js?v=20260709-mobile2";
-import { token } from "./config.js?v=20260709-mobile2";
+import { state } from "./state.js?v=20260709-stream4";
+import { getAuthToken } from "./config.js?v=20260709-stream4";
+import { handleUnauthorized } from "./auth.js?v=20260709-stream4";
 
 // 请求超时设置
 const REQUEST_TIMEOUT_MS = 8000;  // 8 秒超时
@@ -50,6 +51,8 @@ export const fetchQueue = new FetchQueue();
 
 export function withToken(path) {
   const url = new URL(path, window.location.origin);
+  const token = getAuthToken();
+  // 仅当内存仍有 token（通常来自旧书签）时拼 query；正常登录依赖 Cookie
   if (token) {
     url.searchParams.set("token", token);
   }
@@ -60,9 +63,11 @@ export function withToken(path) {
 export async function fetchJsonWithTimeout(path, timeout = REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
+  const token = getAuthToken();
 
   try {
     const res = await fetch(withToken(path), {
+      credentials: "same-origin",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       signal: controller.signal,
     });
@@ -71,10 +76,17 @@ export async function fetchJsonWithTimeout(path, timeout = REQUEST_TIMEOUT_MS) {
     try {
       payload = JSON.parse(text);
     } catch (err) {
+      if (res.status === 401) {
+        handleUnauthorized("请输入访问密码");
+        throw new Error(ERROR_MESSAGES[401]);
+      }
       throw new Error(`HTTP ${res.status}: ${text.slice(0, 180)}`);
     }
     if (!res.ok || payload.ok === false) {
       const status = res.status;
+      if (status === 401) {
+        handleUnauthorized(payload.error || "请输入访问密码");
+      }
       const errorMsg = ERROR_MESSAGES[status] || payload.error || `HTTP ${status}`;
       throw new Error(errorMsg);
     }
@@ -126,4 +138,16 @@ export function logsApiPath() {
     params.set("cursor", cursorJson);
   }
   return `/api/logs?${params.toString()}`;
+}
+
+/** SSE 路径；EventSource 走 Cookie（withCredentials），query token 仅兼容旧书签 */
+export function logsStreamPath({ snapshot = false } = {}) {
+  const params = new URLSearchParams();
+  // 仅显式 snapshot=true 时拉全量；默认增量，历史由 /api/logs 提供
+  if (snapshot) params.set("snapshot", "1");
+  else params.set("snapshot", "0");
+  const token = getAuthToken();
+  if (token) params.set("token", token);
+  const query = params.toString();
+  return query ? `/api/logs/stream?${query}` : "/api/logs/stream";
 }

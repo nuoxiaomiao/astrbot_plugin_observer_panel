@@ -2,9 +2,9 @@
 // 组件 - 日志流
 // ============================================================================
 
-import { state } from "../state.js?v=20260709-mobile2";
-import { LEVELS } from "../config.js?v=20260709-mobile2";
-import { formatCompactLogTime } from "../utils/format.js?v=20260709-mobile2";
+import { state } from "../state.js?v=20260709-stream4";
+import { LEVELS } from "../config.js?v=20260709-stream4";
+import { formatCompactLogTime } from "../utils/format.js?v=20260709-stream4";
 import {
   $,
   setText,
@@ -21,9 +21,9 @@ import {
   renderSignature,
   renderRawLogBlock,
   hydrateRawLogBlock,
-} from "../utils/dom.js?v=20260709-mobile2";
-import { compactText } from "../utils/log-text.js?v=20260709-mobile2";
-import { buildLogTextMatcher, cachedNormalizeModuleGroup } from "../log/analytics.js?v=20260709-mobile2";
+} from "../utils/dom.js?v=20260709-stream4";
+import { compactText } from "../utils/log-text.js?v=20260709-stream4";
+import { buildLogTextMatcher, cachedNormalizeModuleGroup } from "../log/analytics.js?v=20260709-stream4";
 
 let selectTabRef = () => {};
 let syncDetailVisibilityRef = () => {};
@@ -182,17 +182,13 @@ export function scrollHighlightedLogEntry() {
 
 export function focusLogEntry(logEntryId, options = {}) {
   if (!logEntryId || !state.logCache.entries?.length) return;
-  selectTabRef("logs");
-  document.querySelectorAll(".tab").forEach((tab) => {
-    const active = tab.dataset.tab === "logs";
-    tab.classList.toggle("active", active);
-    tab.setAttribute("aria-selected", active ? "true" : "false");
-  });
-  document.querySelectorAll(".view").forEach((view) => {
-    const active = view.id === "logs";
-    view.classList.toggle("active", active);
-    view.hidden = !active;
-  });
+
+  // soft 切 Tab：不 rearm SSE、不强制 HTTP；已在 logs 时只关侧栏抽屉
+  if (state.activeTab !== "logs") {
+    selectTabRef("logs", { soft: true });
+  } else {
+    document.body.classList.remove("sidebar-open");
+  }
 
   syncDetailVisibilityRef();
   renderWorkspaceChromeRef();

@@ -2,10 +2,10 @@
 // 视图 - 系统
 // ============================================================================
 
-import { state } from "../state.js?v=20260709-mobile2";
-import { INTERFACE_STATE_LABELS } from "../config.js?v=20260709-mobile2";
-import { formatBytes, formatPercent, formatNumber, shortUptime, usageKind } from "../utils/format.js?v=20260709-mobile2";
-import { $, setText, renderKv, detailRow, emptyBlock, renderWorkspaceChrome } from "../utils/dom.js?v=20260709-mobile2";
+import { state } from "../state.js?v=20260709-stream4";
+import { INTERFACE_STATE_LABELS } from "../config.js?v=20260709-stream4";
+import { formatBytes, formatPercent, formatNumber, shortUptime, usageKind } from "../utils/format.js?v=20260709-stream4";
+import { $, setText, renderKv, detailRow, emptyBlock, renderWorkspaceChrome } from "../utils/dom.js?v=20260709-stream4";
 
 /**
  * 创建堆栈项目元素（磁盘、网络等）

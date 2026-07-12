@@ -16,8 +16,8 @@
     "default": 7199
   },
   "access_token": {
-    "description": "访问令牌",
-    "hint": "留空则仅本机可直接访问；监听 0.0.0.0 时远程请求会被拒绝。设置后可先打开 http://host:port/?token=你的令牌 完成认证。",
+    "description": "面板登录密码",
+    "hint": "留空则仅本机可直接访问；监听 0.0.0.0 时远程会被拒绝。设置后打开面板地址，在登录页输入密码即可（成功后写入 Cookie，无需在地址栏带 token）。",
     "type": "string",
     "default": ""
   },
@@ -25,6 +25,29 @@
     "description": "前端自动刷新间隔（秒）",
     "type": "int",
     "default": 5
+  },
+  "log_stream": {
+    "description": "日志实时推送（File-SSE）",
+    "type": "object",
+    "items": {
+      "enabled": {
+        "description": "启用文件增量 SSE 推送",
+        "hint": "关闭后前端回退为 /api/logs 轮询。推送载荷与文件 tail 同形状，不改变分析模型。",
+        "type": "bool",
+        "default": true
+      },
+      "interval_ms": {
+        "description": "文件增量扫描间隔（毫秒）",
+        "type": "int",
+        "default": 500
+      },
+      "prefer_logbroker": {
+        "description": "若 AstrBot 核心提供 LogBroker 则 fan-in 到同一 SSE",
+        "hint": "失败时静默忽略，不影响文件 SSE。LogBroker 行挂到 runtime:logbroker 虚拟路径。",
+        "type": "bool",
+        "default": true
+      }
+    }
   },
   "astrbot": {
     "description": "AstrBot 数据源配置",
@@ -41,14 +64,14 @@
         "default": ["astrbot.log", "astrbot.trace.log"]
       },
       "tail_lines": {
-        "description": "每个 AstrBot 日志文件读取的最大行数",
+        "description": "每个 AstrBot 日志文件读取的最大行数（思考 dump 行很长，过小会丢 plain reasoning）",
         "type": "int",
-        "default": 300
+        "default": 1200
       },
       "tail_bytes": {
         "description": "每个 AstrBot 日志文件读取的最大字节数",
         "type": "int",
-        "default": 262144
+        "default": 1572864
       }
     }
   },

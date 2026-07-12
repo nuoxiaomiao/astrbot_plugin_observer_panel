@@ -2,13 +2,13 @@
 // 视图 - AstrBot
 // ============================================================================
 
-import { state } from "../state.js?v=20260709-mobile2";
-import { MODULE_CHART_LIMIT } from "../config.js?v=20260709-mobile2";
+import { state } from "../state.js?v=20260709-stream4";
+import { MODULE_CHART_LIMIT } from "../config.js?v=20260709-stream4";
 import {
   formatTime,
   formatNumber,
   formatCompactLogTime,
-} from "../utils/format.js?v=20260709-mobile2";
+} from "../utils/format.js?v=20260709-stream4";
 import {
   $,
   setText,
@@ -19,18 +19,18 @@ import {
   bindDetailsState,
   detailKey,
   stableKeyText,
-} from "../utils/dom.js?v=20260709-mobile2";
-import { compactJson, compactText } from "../utils/log-text.js?v=20260709-mobile2";
-import { shouldAnimate } from "../utils/motion.js?v=20260709-mobile2";
-import { renderBarChart } from "../components/chart.js?v=20260709-mobile2";
-import { focusLogEntry } from "../components/log-list.js?v=20260709-mobile2";
+} from "../utils/dom.js?v=20260709-stream4";
+import { compactJson, compactText } from "../utils/log-text.js?v=20260709-stream4";
+import { shouldAnimate } from "../utils/motion.js?v=20260709-stream4";
+import { renderBarChart } from "../components/chart.js?v=20260709-stream4";
+import { focusLogEntry } from "../components/log-list.js?v=20260709-stream4";
 import {
   countBy,
   aggregateModuleGroups,
   eventTypeLabel,
   eventTypeClass,
   sessionSourceLabel,
-} from "../log/analytics.js?v=20260709-mobile2";
+} from "../log/analytics.js?v=20260709-stream4";
 
 export function functionCard(title, value, meta, kind = "") {
   const item = document.createElement("article");
@@ -60,6 +60,7 @@ function sessionStatusMeta(session) {
   }
   if (session.displayStatus === "complete") return { label: "已回复", kind: "ok" };
   if (session.displayStatus === "error") return { label: "错误", kind: "bad" };
+  if (session.displayStatus === "stale") return { label: "未完成", kind: "warn" };
   if (session.displayStatus === "generating") return { label: "生成中", kind: "warn" };
   if (session.displayStatus === "running") return { label: "进行中", kind: "debug" };
   return { label: "待完成", kind: "debug" };
@@ -72,6 +73,17 @@ function sessionIsLive(session) {
 function sessionLiveClass(session) {
   if (!sessionIsLive(session)) return "";
   return session.displayStatus === "generating" ? "is-generating" : "is-running";
+}
+
+/** live 时长：墙钟时间，避免单事件会话 lastTs===startTs 恒为 0 */
+function sessionLiveElapsedMs(session, now = Date.now()) {
+  const start = Number(session?.startTs || session?.lastTs || 0);
+  if (!Number.isFinite(start) || start <= 0) return 0;
+  return Math.max(0, now - start);
+}
+
+function formatSessionLiveDuration(session, now = Date.now()) {
+  return formatDurationMs(sessionLiveElapsedMs(session, now));
 }
 
 function withLiveBadge(chip, label, liveClass = "") {
@@ -129,6 +141,9 @@ function sessionResponsePlaceholder(session) {
   }
   if (session.displayStatus === "error") {
     return "该会话执行出错，未生成最终回复。";
+  }
+  if (session.displayStatus === "stale") {
+    return "该会话长时间无新的完成事件，已按超时收口为未完成。";
   }
   return "会话仍在进行中，等待最终回复日志。";
 }
@@ -229,7 +244,7 @@ function updateSessionCard(item, session) {
   if (duration) {
     duration.textContent = session.durationMs != null
       ? `总耗时 ${formatDurationMs(session.durationMs)}`
-      : (live ? `已运行 ${formatDurationMs((session.lastTs || Date.now()) - (session.startTs || Date.now()))}` : "耗时未记录");
+      : (live ? `已运行 ${formatSessionLiveDuration(session)}` : "耗时未记录");
     duration.classList.toggle("is-live-timer", live);
   }
   const footer = item.querySelector(".session-card-footer");
@@ -977,6 +992,23 @@ function buildSessionJourney(session, insights) {
       kind: "reasoning",
       logEntryId: session.reasoningLogEntryId || "",
     });
+  } else if (session.status === "complete" || session.displayStatus === "empty") {
+    // 诚实态：完成但当前窗口/缓存均无思考，避免用户误以为 UI 坏了
+    steps.push({
+      key: "reasoning-missing",
+      title: "模型思考",
+      body: "当前日志窗口未记录模型思考（可能未落盘、已滚出读取窗口，或无法与本会话严格匹配）。",
+      timeLabel: "--",
+      meta: joinMeta([
+        [session.providerId, session.model].filter(Boolean).join(" / "),
+        "未绑定",
+      ]),
+      badgeLabel: "未记录",
+      badgeKind: "debug",
+      state: "done",
+      kind: "note",
+      logEntryId: "",
+    });
   }
 
   // 6. 最终回复：仅当已完成或出错才显示正文，进行中不预先占位
@@ -1207,7 +1239,7 @@ function buildSessionOverview(session) {
     ["模型", [session.providerId, session.model].filter(Boolean).join(" / ") || "--"],
     ["规则", session.personaId || "--"],
     ["工具", formatNumber((session.tools || []).length)],
-    ["总耗时", session.durationMs != null ? formatDurationMs(session.durationMs) : (live ? `${formatDurationMs((session.lastTs || Date.now()) - (session.startTs || Date.now()))}+` : "--")],
+    ["总耗时", session.durationMs != null ? formatDurationMs(session.durationMs) : (live ? `${formatSessionLiveDuration(session)}+` : "--")],
   ].forEach(([label, value]) => {
     const chip = document.createElement("div");
     chip.className = "session-overview-chip";
@@ -1260,7 +1292,7 @@ function patchSessionOverview(section, session) {
     [session.providerId, session.model].filter(Boolean).join(" / ") || "--",
     session.personaId || "--",
     formatNumber((session.tools || []).length),
-    session.durationMs != null ? formatDurationMs(session.durationMs) : (live ? `${formatDurationMs((session.lastTs || Date.now()) - (session.startTs || Date.now()))}+` : "--"),
+    session.durationMs != null ? formatDurationMs(session.durationMs) : (live ? `${formatSessionLiveDuration(session)}+` : "--"),
   ];
   chips.forEach((el, idx) => {
     if (values[idx] != null && el.textContent !== values[idx]) el.textContent = values[idx];

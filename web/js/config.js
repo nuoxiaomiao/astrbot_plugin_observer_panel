@@ -4,7 +4,23 @@
 
 export const initialQuery = new URLSearchParams(window.location.search);
 export const qs = initialQuery;
-export const token = qs.get("token") || "";
+/** 兼容旧书签 ?token=；登录成功后以 Cookie 为准，可清空 */
+let authToken = qs.get("token") || "";
+
+export function getAuthToken() {
+  return authToken;
+}
+
+export function setAuthToken(value) {
+  authToken = String(value || "");
+}
+
+export function clearAuthToken() {
+  authToken = "";
+}
+
+/** @deprecated 使用 getAuthToken；保留具名导出以免遗漏引用 */
+export const token = authToken;
 
 export const LEVELS = {
   error: { label: "错误", badge: "bad" },
@@ -23,7 +39,9 @@ export const DIAGNOSTIC_LEVELS = {
 };
 
 export const MODULE_CHART_LIMIT = 10;
-export const TRACE_ANALYSIS_ENTRY_LIMIT = 1500;
+export const TRACE_ANALYSIS_ENTRY_LIMIT = 2500;
+/** 分析窗裁剪时优先保留的 plain 思考候选条数 */
+export const REASONING_CANDIDATE_KEEP = 100;
 export const IMPORTANT_EVENT_TYPES = new Set(["tool_call", "tool_result", "message_out", "provider_response", "memory", "waking", "message_cleanup", "slow", "warn", "error"]);
 
 // 与后端 LOG_TIMESTAMP_RE 保持一致，用于从日志行解析时间戳

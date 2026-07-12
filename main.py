@@ -8,12 +8,14 @@ import json
 import os
 import platform
 import re
+import secrets
 import shutil
 import socket
 import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -36,9 +38,18 @@ try:
 except ImportError:
     psutil = None  # type: ignore
 
+# 可选：AstrBot 核心 LogBroker（不可用时仅文件 SSE）
+try:
+    from astrbot.core import LogBroker as _LogBrokerType  # type: ignore
+
+    LOGBROKER_IMPORTABLE = True
+except Exception:
+    _LogBrokerType = None  # type: ignore
+    LOGBROKER_IMPORTABLE = False
+
 
 PLUGIN_NAME = "astrbot_plugin_observer_panel"
-PLUGIN_VERSION = "0.4.2"
+PLUGIN_VERSION = "0.4.4"
 
 DEFAULT_ASTRBOT_LOG_FILES = ["astrbot.log", "astrbot.trace.log"]
 DEFAULT_THRESHOLDS = {
@@ -60,9 +71,25 @@ DEFAULT_UI = {
     "log_page_size": 80,
     "privacy_mode": False,
 }
+DEFAULT_LOG_STREAM = {
+    "enabled": True,
+    "interval_ms": 500,
+    "prefer_logbroker": True,
+}
+LOGBROKER_VIRTUAL_PATH = "runtime:logbroker"
+LOGBROKER_CACHE_MAX = 500
+SSE_SUBSCRIBER_QUEUE_SIZE = 32
+SSE_HEARTBEAT_SECONDS = 30.0
 
 ALLOWED_LOG_SOURCES = {"all", "astrbot"}
 AUTH_COOKIE_NAME = "observer_panel_token"
+# 会话 Cookie 存随机 id，不存 access_token 明文
+SESSION_TTL_SECONDS = 7 * 24 * 3600
+SESSION_ID_BYTES = 32
+LOGIN_RATE_WINDOW_SECONDS = 300
+LOGIN_RATE_MAX_ATTEMPTS = 12
+# 兼容旧 Cookie：值等于密码时接受并升级为 session
+LEGACY_PASSWORD_COOKIE = True
 
 SECRET_KEY_RE = re.compile(
     r"(?i)(?<![\w])(api[_-]?key|access[_-]?token|authorization|bearer|secret|password|passwd|token|key)(?![\w])"
@@ -1046,6 +1073,27 @@ class ObserverPanelPlugin(Star):
         self._log_stats_cache: dict[str, Any] = {}
         self._started_at = time.time()
         self._system_cache: dict[str, Any] = {}
+
+        # 文件 SSE hub（主路径）；LogBroker 可选 fan-in
+        self._log_subscribers: list[asyncio.Queue] = []
+        self._log_stream_task: asyncio.Task | None = None
+        self._file_stream_cursors: dict[str, dict[str, Any]] = {}
+        self._log_stream_enabled = False
+        self._log_broker: Any | None = None
+        self._log_broker_queue: Any | None = None
+        self._log_broker_task: asyncio.Task | None = None
+        self._log_broker_enabled = False
+        self._log_broker_cache: deque = deque(maxlen=LOGBROKER_CACHE_MAX)
+        self._log_broker_line_count = 0
+        self._log_broker_base_line = 0
+        self._log_broker_pending_lines: list[str] = []
+        self._log_broker_lock = asyncio.Lock()
+
+        # 登录会话：session_id -> expire_ts；失败计数按 IP
+        self._auth_sessions: dict[str, float] = {}
+        self._login_failures: dict[str, list[float]] = {}
+        self._session_lock = threading.Lock()
+
         # 预热 psutil CPU 采样（非阻塞 interval=None）
         if not _is_linux() and _psutil_available():
             try:
@@ -1058,9 +1106,11 @@ class ObserverPanelPlugin(Star):
         if not self._cfg_bool("enabled", True):
             logger.info("[ObserverPanel] 已禁用，未启动 WebUI")
             return
+        await self._start_log_stream_hub()
         await self._start_server()
 
     async def terminate(self) -> None:
+        await self._stop_log_stream_hub()
         await self._stop_server()
 
     @property
@@ -1089,11 +1139,14 @@ class ObserverPanelPlugin(Star):
             )
 
             app.router.add_get("/", self._handle_index)
+            app.router.add_post("/api/login", self._handle_login)
+            app.router.add_post("/api/logout", self._handle_logout)
             app.router.add_get("/api/health", self._handle_health)
             app.router.add_get("/api/summary", self._handle_summary)
             app.router.add_get("/api/system", self._handle_system)
             app.router.add_get("/api/astrbot", self._handle_astrbot)
             app.router.add_get("/api/logs", self._handle_logs)
+            app.router.add_get("/api/logs/stream", self._handle_logs_stream)
             app.router.add_get("/api/config", self._handle_config)
             # 通用静态资源服务（支持模块化后的 CSS/JS 多文件）
             app.router.add_static("/", self.web_dir, name="static", show_index=False)
@@ -1147,36 +1200,147 @@ class ObserverPanelPlugin(Star):
             response.headers["Cache-Control"] = "no-cache"
         return response
 
+    def _is_public_auth_path(self, request: web.Request) -> bool:
+        """登录壳与登录/登出 API 在配置密码后仍需可访问。"""
+        path = request.path or "/"
+        method = (request.method or "GET").upper()
+        if method == "POST" and path in {"/api/login", "/api/logout"}:
+            return True
+        # 非 API 的 GET：HTML/CSS/JS 等静态资源，供登录页加载
+        if method in {"GET", "HEAD"} and not path.startswith("/api/"):
+            return True
+        return False
+
+    def _token_matches(self, supplied: str, expected: str) -> bool:
+        left = str(supplied or "")
+        right = str(expected or "")
+        if not right:
+            return False
+        try:
+            return hmac.compare_digest(left, right)
+        except (TypeError, ValueError):
+            return False
+
+    def _client_key(self, request: web.Request) -> str:
+        return str(request.remote or "unknown")
+
+    def _prune_auth_sessions(self) -> None:
+        now = time.time()
+        expired = [sid for sid, exp in self._auth_sessions.items() if exp <= now]
+        for sid in expired:
+            self._auth_sessions.pop(sid, None)
+
+    def _create_auth_session(self) -> str:
+        with self._session_lock:
+            self._prune_auth_sessions()
+            # 控制内存：超限时丢弃最早过期的一半
+            if len(self._auth_sessions) > 5000:
+                ordered = sorted(self._auth_sessions.items(), key=lambda item: item[1])
+                for sid, _ in ordered[: len(ordered) // 2]:
+                    self._auth_sessions.pop(sid, None)
+            sid = secrets.token_urlsafe(SESSION_ID_BYTES)
+            self._auth_sessions[sid] = time.time() + SESSION_TTL_SECONDS
+            return sid
+
+    def _revoke_auth_session(self, session_id: str) -> None:
+        if not session_id:
+            return
+        with self._session_lock:
+            self._auth_sessions.pop(session_id, None)
+
+    def _session_valid(self, session_id: str) -> bool:
+        if not session_id:
+            return False
+        with self._session_lock:
+            exp = self._auth_sessions.get(session_id)
+            if exp is None:
+                return False
+            if exp <= time.time():
+                self._auth_sessions.pop(session_id, None)
+                return False
+            return True
+
+    def _login_rate_limited(self, request: web.Request) -> bool:
+        key = self._client_key(request)
+        now = time.time()
+        with self._session_lock:
+            attempts = [t for t in self._login_failures.get(key, []) if now - t < LOGIN_RATE_WINDOW_SECONDS]
+            self._login_failures[key] = attempts
+            return len(attempts) >= LOGIN_RATE_MAX_ATTEMPTS
+
+    def _record_login_failure(self, request: web.Request) -> None:
+        key = self._client_key(request)
+        now = time.time()
+        with self._session_lock:
+            attempts = [t for t in self._login_failures.get(key, []) if now - t < LOGIN_RATE_WINDOW_SECONDS]
+            attempts.append(now)
+            self._login_failures[key] = attempts
+
+    def _clear_login_failures(self, request: web.Request) -> None:
+        key = self._client_key(request)
+        with self._session_lock:
+            self._login_failures.pop(key, None)
+
+    def _extract_bearer(self, request: web.Request) -> str:
+        header = request.headers.get("Authorization", "")
+        if header.lower().startswith("bearer "):
+            return header[7:].strip()
+        return ""
+
+    def _authenticate_request(self, request: web.Request, password: str) -> tuple[bool, bool]:
+        """
+        校验请求是否已认证。
+        返回 (ok, should_issue_session)：
+        - Cookie 有效 session → 通过
+        - 旧 Cookie 存密码 / query token / Bearer 密码 → 通过并建议签发 session
+        - 错误 query token 不会覆盖有效 Cookie（先 Cookie 再 Bearer 再 query）
+        """
+        cookie_val = request.cookies.get(AUTH_COOKIE_NAME, "") or ""
+        if self._session_valid(cookie_val):
+            return True, False
+        if LEGACY_PASSWORD_COOKIE and cookie_val and self._token_matches(cookie_val, password):
+            return True, True
+
+        bearer = self._extract_bearer(request)
+        if bearer:
+            if self._session_valid(bearer):
+                return True, False
+            if self._token_matches(bearer, password):
+                return True, True
+
+        query_token = request.query.get("token", "") or ""
+        if query_token and self._token_matches(query_token, password):
+            return True, True
+
+        return False, False
+
     @web.middleware
     async def _auth_middleware(self, request: web.Request, handler: Any) -> web.StreamResponse:
         token = self._cfg_str("access_token", "").strip()
 
-        # 无 token 配置时，仅对远程非 API 请求拒绝
+        # 无密码配置时：本机/非全网卡放行；全网卡远程拒绝
         if not token:
             if self._host_all_interfaces() and not self._is_loopback_request(request):
                 if request.path.startswith("/api/"):
-                    return _json_response({"ok": False, "error": "远程访问需要配置访问令牌"}, status=401)
-                return web.Response(status=401, text="远程访问需要配置访问令牌")
+                    return _json_response({"ok": False, "error": "远程访问需要配置访问密码"}, status=401)
+                return web.Response(status=401, text="远程访问需要配置访问密码")
             return await handler(request)
 
-        # 有 token 配置时，从请求中获取
-        # 优先读取 cookie，使首次使用 ?token= 访问后后续静态资源也能正常加载
-        supplied = request.cookies.get(AUTH_COOKIE_NAME, "")
-        query_token = request.query.get("token", "")
-        if query_token:
-            supplied = query_token
-        if not supplied:
-            header = request.headers.get("Authorization", "")
-            if header.lower().startswith("bearer "):
-                supplied = header[7:].strip()
+        # 已配置密码：登录页与静态资源放行；其余 /api/* 需认证
+        if self._is_public_auth_path(request):
+            return await handler(request)
 
-        if not hmac.compare_digest(supplied, token):
+        ok, issue_session = self._authenticate_request(request, token)
+        if not ok:
             if request.path.startswith("/api/"):
-                return _json_response({"ok": False, "error": "未授权访问"}, status=401)
-            return web.Response(status=401, text="未授权访问")
+                return _json_response({"ok": False, "error": "未授权访问，请先登录"}, status=401)
+            return web.Response(status=401, text="未授权访问，请先登录")
+
         response = await handler(request)
-        if query_token and hmac.compare_digest(query_token, token):
-            self._set_auth_cookie(response, query_token, request)
+        # 旧密码 Cookie / query token / Bearer 密码：升级为随机 session
+        if issue_session:
+            session_id = self._create_auth_session()
+            self._set_auth_cookie(response, session_id, request)
         return response
 
     async def _handle_index(self, request: web.Request) -> web.Response:
@@ -1197,28 +1361,88 @@ class ObserverPanelPlugin(Star):
         response.enable_compression()
         return response
 
-    def _set_auth_cookie(self, response: Response, token: str, request: web.Request) -> None:
-        secure = request.secure or request.headers.get("X-Forwarded-Proto", "").lower() == "https"
+    def _cookie_secure_flag(self, request: web.Request) -> bool:
+        # 仅信传输层 secure；不默认信 X-Forwarded-Proto，避免 HTTP 下误标 Secure
+        return bool(request.secure)
+
+    def _set_auth_cookie(self, response: Response, session_id: str, request: web.Request) -> None:
+        secure = self._cookie_secure_flag(request)
         response.set_cookie(
             AUTH_COOKIE_NAME,
-            token,
+            session_id,
             httponly=True,
             samesite="Lax",
             secure=secure,
             path="/",
+            max_age=SESSION_TTL_SECONDS,
         )
 
+    def _clear_auth_cookie(self, response: Response, request: web.Request) -> None:
+        secure = self._cookie_secure_flag(request)
+        response.del_cookie(AUTH_COOKIE_NAME, path="/")
+        # 兼容部分客户端：再写一条过期 Cookie
+        response.set_cookie(
+            AUTH_COOKIE_NAME,
+            "",
+            httponly=True,
+            samesite="Lax",
+            secure=secure,
+            path="/",
+            max_age=0,
+        )
+
+    async def _handle_login(self, request: web.Request) -> web.Response:
+        token = self._cfg_str("access_token", "").strip()
+        if not token:
+            # 未配置密码：本机直接成功；远程全网卡仍拒绝
+            if self._host_all_interfaces() and not self._is_loopback_request(request):
+                return _json_response({"ok": False, "error": "远程访问需要配置访问密码"}, status=401)
+            return _json_response({"ok": True, "data": {"auth_required": False}, "now": _now_ms()})
+
+        if self._login_rate_limited(request):
+            return _json_response(
+                {"ok": False, "error": "登录尝试过于频繁，请稍后再试"},
+                status=429,
+            )
+
+        try:
+            body = await request.json()
+        except (json.JSONDecodeError, TypeError):
+            body = {}
+        if not isinstance(body, dict):
+            body = {}
+        password = str(body.get("password") or body.get("token") or "").strip()
+        if not self._token_matches(password, token):
+            self._record_login_failure(request)
+            return _json_response({"ok": False, "error": "密码错误"}, status=401)
+
+        self._clear_login_failures(request)
+        session_id = self._create_auth_session()
+        response = _json_response({"ok": True, "data": {"auth_required": True}, "now": _now_ms()})
+        self._set_auth_cookie(response, session_id, request)
+        return response
+
+    async def _handle_logout(self, request: web.Request) -> web.Response:
+        cookie_val = request.cookies.get(AUTH_COOKIE_NAME, "") or ""
+        self._revoke_auth_session(cookie_val)
+        response = _json_response({"ok": True, "data": {"logged_out": True}, "now": _now_ms()})
+        self._clear_auth_cookie(response, request)
+        return response
+
     async def _handle_health(self, request: web.Request) -> web.Response:
+        stream_on = self._log_stream_enabled
         return _json_response(
             {
                 "ok": True,
                 "plugin": PLUGIN_NAME,
                 "version": PLUGIN_VERSION,
                 "uptime_seconds": round(time.time() - self._started_at, 3),
-                "log_mode": "file",
-                "log_stream_available": False,
-                "log_stream_enabled": False,
-                "cached_logs": 0,
+                "log_mode": "stream" if stream_on else "file",
+                "log_stream_available": True,
+                "log_stream_enabled": stream_on,
+                "log_broker_available": LOGBROKER_IMPORTABLE,
+                "log_broker_enabled": self._log_broker_enabled,
+                "cached_logs": len(self._log_broker_cache) if self._log_broker_enabled else 0,
                 "now": _now_ms(),
             }
         )
@@ -1279,9 +1503,81 @@ class ObserverPanelPlugin(Star):
         cursor = _parse_logs_cursor(cursor_str)
         data: dict[str, Any] = {}
         if source in {"all", "astrbot"}:
+            # 始终返回文件形状 { astrbot: [...] }，禁止切换为 live 结构
             data["astrbot"] = await self._collect_astrbot_logs(cursor=cursor)
             data["source"] = "file"
+            data["log_stream_enabled"] = self._log_stream_enabled
         return _json_response({"ok": True, "data": data, "now": _now_ms()})
+
+    async def _handle_logs_stream(self, request: web.Request) -> web.StreamResponse:
+        """SSE：推送与 /api/logs 同形状的 astrbot[] 增量。"""
+        if not self._log_stream_cfg_bool("enabled", DEFAULT_LOG_STREAM["enabled"]):
+            return _json_response({"ok": False, "error": "日志流已在配置中关闭"}, status=503)
+        if not self._log_stream_enabled:
+            return _json_response({"ok": False, "error": "日志流 hub 未运行"}, status=503)
+
+        include_snapshot = str(request.query.get("snapshot", "0")).strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        response = web.StreamResponse()
+        response.headers["Content-Type"] = "text/event-stream; charset=utf-8"
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Connection"] = "keep-alive"
+        response.headers["X-Accel-Buffering"] = "no"
+        await response.prepare(request)
+
+        # 先订阅再 snapshot，避免 snapshot 与 subscribe 之间丢增量；
+        # snapshot 用 replaceAll，后续 queue 增量可能与 tail 重叠，由前端 merge 消化。
+        queue = self._subscribe_log_stream()
+        try:
+            hello = {
+                "type": "hello",
+                "data": {
+                    "log_mode": "stream",
+                    "log_stream_enabled": True,
+                    "log_broker_enabled": self._log_broker_enabled,
+                },
+                "now": _now_ms(),
+            }
+            await response.write(self._sse_encode(hello))
+
+            if include_snapshot:
+                files = await self._collect_astrbot_logs(cursor=None)
+                if self._log_broker_enabled:
+                    broker_file = await self._log_broker_file_payload(reset=True, lines=None)
+                    if broker_file is not None:
+                        files = list(files) + [broker_file]
+                snapshot = {
+                    "type": "snapshot",
+                    "data": {"astrbot": files, "source": "stream"},
+                    "now": _now_ms(),
+                }
+                await response.write(self._sse_encode(snapshot))
+
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=SSE_HEARTBEAT_SECONDS)
+                except asyncio.TimeoutError:
+                    await response.write(b": heartbeat\n\n")
+                    continue
+                if event is None:
+                    break
+                await response.write(self._sse_encode(event))
+        except (asyncio.CancelledError, ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
+        except Exception as exc:
+            msg = str(exc).lower()
+            if not any(k in msg for k in ("closing", "closed", "reset", "broken", "connection")):
+                logger.warning("[ObserverPanel] SSE 流异常: %s", exc)
+        finally:
+            self._unsubscribe_log_stream(queue)
+            try:
+                await response.write_eof()
+            except Exception:
+                pass
+        return response
 
     def _collect_astrbot(self) -> dict[str, Any]:
         cfg = _to_jsonable(_safe_call(self.context, "get_config", default={}))
@@ -1582,11 +1878,11 @@ class ObserverPanelPlugin(Star):
     async def _collect_log_stats(self) -> dict[str, Any]:
         astrbot = [item for item in self._astrbot_log_paths()]
         max_lines = min(
-            self._astrbot_cfg_int("tail_lines", 300, 1, 3000),
+            self._astrbot_cfg_int("tail_lines", 1200, 1, 5000),
             self._threshold_int("summary_log_lines", 180, 20, 1000),
         )
         max_bytes = min(
-            self._astrbot_cfg_int("tail_bytes", 262144, 4096, 4 * 1024 * 1024),
+            self._astrbot_cfg_int("tail_bytes", 1572864, 4096, 8 * 1024 * 1024),
             self._threshold_int("summary_log_bytes", 131072, 4096, 2 * 1024 * 1024),
         )
         redact = self._security_cfg_bool("redact_secrets", True)
@@ -1650,9 +1946,9 @@ class ObserverPanelPlugin(Star):
         }
 
         if self._host_all_interfaces() and not self._cfg_str("access_token", "").strip():
-            add("warn", "远程 API 需要访问令牌", "当前监听所有网卡且 access_token 为空，远程 API 请求会被拒绝。", "security")
+            add("warn", "远程访问需要访问密码", "当前监听所有网卡且 access_token 为空，远程请求会被拒绝。请配置面板登录密码。", "security")
         elif not self._cfg_str("access_token", "").strip():
-            add("info", "未配置访问令牌", "当前仅依赖绑定地址保护面板，同机其他进程/用户仍可能访问。", "security")
+            add("info", "未配置访问密码", "当前仅依赖绑定地址保护面板，同机其他进程/用户仍可能访问。建议配置 access_token 作为登录密码。", "security")
 
         if not _is_linux() and not _psutil_available():
             add(
@@ -1875,8 +2171,8 @@ class ObserverPanelPlugin(Star):
         return {"interfaces": interfaces, "source": "linux-sysfs"}
 
     async def _collect_astrbot_logs(self, *, cursor: dict[str, dict[str, Any]] | None = None) -> list[dict[str, Any]]:
-        max_lines = self._astrbot_cfg_int("tail_lines", 300, 1, 3000)
-        max_bytes = self._astrbot_cfg_int("tail_bytes", 262144, 4096, 4 * 1024 * 1024)
+        max_lines = self._astrbot_cfg_int("tail_lines", 1200, 1, 5000)
+        max_bytes = self._astrbot_cfg_int("tail_bytes", 1572864, 4096, 8 * 1024 * 1024)
         redact = self._security_cfg_bool("redact_secrets", True)
         privacy = self._ui_cfg_bool("privacy_mode", DEFAULT_UI["privacy_mode"])
         paths = self._astrbot_log_paths()
@@ -1959,13 +2255,25 @@ class ObserverPanelPlugin(Star):
                 "port": self._cfg_int("port", 7199, 1, 65535),
                 "has_access_token": bool(self._cfg_str("access_token", "")),
                 "refresh_interval_seconds": self._cfg_int("refresh_interval_seconds", 5, 2, 120),
-                "log_stream_enabled": False,
-                "log_stream_available": False,
+                "log_stream_enabled": self._log_stream_enabled,
+                "log_stream_available": True,
+                "log_mode": "stream" if self._log_stream_enabled else "file",
+                "log_broker_available": LOGBROKER_IMPORTABLE,
+                "log_broker_enabled": self._log_broker_enabled,
+                "log_stream": {
+                    "enabled": self._log_stream_cfg_bool("enabled", DEFAULT_LOG_STREAM["enabled"]),
+                    "interval_ms": self._log_stream_cfg_int(
+                        "interval_ms", DEFAULT_LOG_STREAM["interval_ms"], 200, 5000
+                    ),
+                    "prefer_logbroker": self._log_stream_cfg_bool(
+                        "prefer_logbroker", DEFAULT_LOG_STREAM["prefer_logbroker"]
+                    ),
+                },
                 "astrbot": {
                     "logs_dir": self._astrbot_cfg_str("logs_dir", "data/logs"),
                     "log_files": _as_list(self._astrbot_cfg("log_files", DEFAULT_ASTRBOT_LOG_FILES), DEFAULT_ASTRBOT_LOG_FILES),
-                    "tail_lines": self._astrbot_cfg_int("tail_lines", 300, 1, 3000),
-                    "tail_bytes": self._astrbot_cfg_int("tail_bytes", 262144, 4096, 4 * 1024 * 1024),
+                    "tail_lines": self._astrbot_cfg_int("tail_lines", 1200, 1, 5000),
+                    "tail_bytes": self._astrbot_cfg_int("tail_bytes", 1572864, 4096, 8 * 1024 * 1024),
                 },
                 "security": {
                     "redact_secrets": self._security_cfg_bool("redact_secrets", True),
@@ -2043,3 +2351,405 @@ class ObserverPanelPlugin(Star):
 
     def _threshold_float(self, key: str, default: float, min_value: float | None = None, max_value: float | None = None) -> float:
         return _as_float(self._section_cfg("thresholds", key, default), default, min_value, max_value)
+
+    def _log_stream_cfg(self, key: str, default: Any = None) -> Any:
+        return self._section_cfg("log_stream", key, default)
+
+    def _log_stream_cfg_bool(self, key: str, default: bool = False) -> bool:
+        return _as_bool(self._log_stream_cfg(key, default), default)
+
+    def _log_stream_cfg_int(self, key: str, default: int, min_value: int | None = None, max_value: int | None = None) -> int:
+        return _as_int(self._log_stream_cfg(key, default), default, min_value, max_value)
+
+    # ==================== File-SSE hub + 可选 LogBroker ====================
+
+    @staticmethod
+    def _sse_encode(payload: dict[str, Any]) -> bytes:
+        return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
+
+    def _subscribe_log_stream(self) -> asyncio.Queue:
+        queue: asyncio.Queue = asyncio.Queue(maxsize=SSE_SUBSCRIBER_QUEUE_SIZE)
+        self._log_subscribers.append(queue)
+        return queue
+
+    def _unsubscribe_log_stream(self, queue: asyncio.Queue) -> None:
+        if queue in self._log_subscribers:
+            self._log_subscribers.remove(queue)
+
+    def _publish_log_stream_event(self, event: dict[str, Any]) -> None:
+        dead: list[asyncio.Queue] = []
+        for subscriber in list(self._log_subscribers):
+            try:
+                subscriber.put_nowait(event)
+            except asyncio.QueueFull:
+                # 丢弃最旧再试一次，避免慢客户端拖死 hub
+                try:
+                    subscriber.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+                try:
+                    subscriber.put_nowait(event)
+                except asyncio.QueueFull:
+                    logger.debug("[ObserverPanel] SSE 订阅队列仍满，丢弃事件")
+            except Exception:
+                dead.append(subscriber)
+        for queue in dead:
+            self._unsubscribe_log_stream(queue)
+
+    async def _start_log_stream_hub(self) -> None:
+        if not self._log_stream_cfg_bool("enabled", DEFAULT_LOG_STREAM["enabled"]):
+            self._log_stream_enabled = False
+            logger.info("[ObserverPanel] 日志流已在配置中关闭，使用文件轮询")
+            return
+        if self._log_stream_task is not None and not self._log_stream_task.done():
+            self._log_stream_enabled = True
+            return
+
+        self._file_stream_cursors.clear()
+        if self._log_stream_cfg_bool("prefer_logbroker", DEFAULT_LOG_STREAM["prefer_logbroker"]):
+            await self._try_init_log_broker()
+
+        self._log_stream_task = asyncio.create_task(self._log_stream_hub_loop())
+        self._log_stream_enabled = True
+        logger.info(
+            "[ObserverPanel] 日志流 hub 已启动 (file-sse%s)",
+            ", logbroker" if self._log_broker_enabled else "",
+        )
+
+    async def _stop_log_stream_hub(self) -> None:
+        self._log_stream_enabled = False
+        for subscriber in list(self._log_subscribers):
+            try:
+                subscriber.put_nowait(None)
+            except Exception:
+                pass
+        self._log_subscribers.clear()
+
+        if self._log_stream_task is not None:
+            self._log_stream_task.cancel()
+            try:
+                await self._log_stream_task
+            except asyncio.CancelledError:
+                pass
+            self._log_stream_task = None
+
+        await self._cleanup_log_broker()
+        self._file_stream_cursors.clear()
+
+    async def _log_stream_hub_loop(self) -> None:
+        interval_ms = self._log_stream_cfg_int(
+            "interval_ms", DEFAULT_LOG_STREAM["interval_ms"], 200, 5000
+        )
+        interval = interval_ms / 1000.0
+        try:
+            while True:
+                try:
+                    await self._log_stream_tick()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning("[ObserverPanel] 日志流 tick 失败: %s", exc, exc_info=True)
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            logger.debug("[ObserverPanel] 日志流 hub 已停止")
+
+    async def _log_stream_tick(self) -> None:
+        if not self._log_subscribers:
+            # 无订阅者时仍推进 cursor，避免重连时洪水；但不打包推送
+            await self._collect_stream_delta(update_cursors=True, force_publish=False)
+            return
+        files = await self._collect_stream_delta(update_cursors=True, force_publish=True)
+        if not files:
+            return
+        self._publish_log_stream_event(
+            {
+                "type": "logs",
+                "data": {"astrbot": files, "source": "stream"},
+                "now": _now_ms(),
+            }
+        )
+
+    async def _collect_stream_delta(
+        self,
+        *,
+        update_cursors: bool,
+        force_publish: bool,
+    ) -> list[dict[str, Any]]:
+        max_lines = self._astrbot_cfg_int("tail_lines", 1200, 1, 5000)
+        max_bytes = self._astrbot_cfg_int("tail_bytes", 1572864, 4096, 8 * 1024 * 1024)
+        redact = self._security_cfg_bool("redact_secrets", True)
+        privacy = self._ui_cfg_bool("privacy_mode", DEFAULT_UI["privacy_mode"])
+        paths = self._astrbot_log_paths()
+        changed: list[dict[str, Any]] = []
+
+        for path in paths:
+            key = str(path)
+            cursor = self._file_stream_cursors.get(key)
+            data = await asyncio.to_thread(
+                _tail_file_incremental_sync,
+                path,
+                max_bytes=max_bytes,
+                max_lines=max_lines,
+                redact=redact,
+                cursor=cursor,
+            )
+            if update_cursors:
+                cursor_payload = data.get("cursor") or _log_cursor_payload(data)
+                self._file_stream_cursors[key] = dict(cursor_payload)
+            if data.get("unchanged") and not data.get("reset"):
+                continue
+            if privacy:
+                data = _apply_privacy_to_log_payload(data, privacy=True)
+            if force_publish:
+                changed.append(data)
+
+        if self._log_broker_enabled and force_publish:
+            broker_delta = await self._drain_log_broker_delta(privacy=privacy)
+            if broker_delta is not None:
+                changed.append(broker_delta)
+
+        return changed
+
+    def _format_log_broker_entry(self, entry: Any) -> str:
+        if entry is None:
+            return ""
+        if isinstance(entry, str):
+            return entry
+        if isinstance(entry, dict):
+            for key in ("message", "msg", "text", "line", "raw"):
+                value = entry.get(key)
+                if value is not None and str(value).strip():
+                    level = str(entry.get("level") or entry.get("lvl") or "").strip()
+                    ts = entry.get("time") or entry.get("timestamp") or entry.get("ts")
+                    parts: list[str] = []
+                    if ts is not None:
+                        try:
+                            ts_f = float(ts)
+                            if ts_f > 1e12:
+                                ts_f = ts_f / 1000.0
+                            parts.append(time.strftime("[%Y-%m-%d %H:%M:%S]", time.localtime(ts_f)))
+                        except (TypeError, ValueError, OSError):
+                            parts.append(f"[{ts}]")
+                    if level:
+                        parts.append(f"[{level.upper()}]")
+                    parts.append(str(value))
+                    return " ".join(parts)
+            try:
+                return json.dumps(entry, ensure_ascii=False)
+            except (TypeError, ValueError):
+                return str(entry)
+        return str(entry)
+
+    async def _log_broker_file_payload(
+        self,
+        *,
+        reset: bool,
+        lines: list[str] | None,
+    ) -> dict[str, Any] | None:
+        redact = self._security_cfg_bool("redact_secrets", True)
+        privacy = self._ui_cfg_bool("privacy_mode", DEFAULT_UI["privacy_mode"])
+        async with self._log_broker_lock:
+            if lines is None:
+                # snapshot：导出缓存尾部
+                raw_lines = [self._format_log_broker_entry(item) for item in list(self._log_broker_cache)]
+                raw_lines = [line for line in raw_lines if line]
+                if not raw_lines and not self._log_broker_enabled:
+                    return None
+                base_line = max(0, self._log_broker_line_count - len(raw_lines))
+                line_count = self._log_broker_line_count
+            else:
+                raw_lines = list(lines)
+                if not raw_lines and not reset:
+                    return None
+                base_line = self._log_broker_base_line
+                line_count = self._log_broker_line_count
+
+        if redact:
+            raw_lines = [str(_redact(line)) for line in raw_lines]
+        data = {
+            "path": LOGBROKER_VIRTUAL_PATH,
+            "exists": True,
+            "readable": True,
+            "size": line_count,
+            "mtime": time.time(),
+            "lines": raw_lines,
+            "truncated": False,
+            "line_count": line_count,
+            "base_line": base_line,
+            "ends_with_newline": True,
+            "reset": reset,
+            "virtual": True,
+            "source": "logbroker",
+        }
+        data["cursor"] = _log_cursor_payload(data)
+        if privacy:
+            data = _apply_privacy_to_log_payload(data, privacy=True)
+        return data
+
+    async def _drain_log_broker_delta(self, *, privacy: bool) -> dict[str, Any] | None:
+        async with self._log_broker_lock:
+            if not self._log_broker_pending_lines:
+                return None
+            lines = list(self._log_broker_pending_lines)
+            self._log_broker_pending_lines.clear()
+            base_line = self._log_broker_base_line
+            line_count = self._log_broker_line_count
+            # 增量后 base 仍指向窗口起点（前端 merge 会按 tail 截断）
+            self._log_broker_base_line = base_line
+
+        redact = self._security_cfg_bool("redact_secrets", True)
+        if redact:
+            lines = [str(_redact(line)) for line in lines]
+        data = {
+            "path": LOGBROKER_VIRTUAL_PATH,
+            "exists": True,
+            "readable": True,
+            "size": line_count,
+            "mtime": time.time(),
+            "lines": lines,
+            "truncated": False,
+            "line_count": line_count,
+            "base_line": base_line,
+            "ends_with_newline": True,
+            "reset": False,
+            "virtual": True,
+            "source": "logbroker",
+        }
+        data["cursor"] = _log_cursor_payload(data)
+        if privacy:
+            data = _apply_privacy_to_log_payload(data, privacy=True)
+        return data
+
+    async def _try_init_log_broker(self) -> None:
+        if not LOGBROKER_IMPORTABLE:
+            return
+        strategies = [
+            self._try_log_broker_from_context,
+            self._try_log_broker_from_managers,
+            self._try_log_broker_from_logger,
+            self._try_log_broker_from_modules,
+        ]
+        for strategy in strategies:
+            try:
+                broker = strategy()
+                if broker is not None and hasattr(broker, "register"):
+                    await self._activate_log_broker(broker)
+                    return
+            except Exception as exc:
+                logger.debug("[ObserverPanel] LogBroker 策略 %s 失败: %s", strategy.__name__, exc)
+        logger.debug("[ObserverPanel] 未找到 LogBroker，仅使用文件 SSE")
+
+    def _try_log_broker_from_context(self) -> Any | None:
+        for attr_name in ("_core_lifecycle", "core_lifecycle", "_core", "core", "_internal"):
+            core = getattr(self.context, attr_name, None)
+            if core is not None and hasattr(core, "log_broker"):
+                return getattr(core, "log_broker", None)
+        return None
+
+    def _try_log_broker_from_managers(self) -> Any | None:
+        manager_attrs = (
+            "provider_manager",
+            "platform_manager",
+            "conversation_manager",
+            "astrbot_config_mgr",
+            "kb_manager",
+            "cron_manager",
+            "subagent_orchestrator",
+        )
+        for manager_attr in manager_attrs:
+            manager = getattr(self.context, manager_attr, None)
+            if manager is None:
+                continue
+            for core_attr in ("_core_lifecycle", "core_lifecycle", "_core", "core"):
+                core = getattr(manager, core_attr, None)
+                if core is not None and hasattr(core, "log_broker"):
+                    return getattr(core, "log_broker", None)
+        return None
+
+    def _try_log_broker_from_logger(self) -> Any | None:
+        try:
+            from astrbot.api import logger as astrbot_logger
+        except Exception:
+            return None
+        handlers = getattr(astrbot_logger, "handlers", None) or []
+        for handler in handlers:
+            if hasattr(handler, "log_broker"):
+                return getattr(handler, "log_broker", None)
+        return None
+
+    def _try_log_broker_from_modules(self) -> Any | None:
+        for module_name in ("astrbot.core", "astrbot.core.log", "astrbot.core.lifecycle"):
+            module = sys.modules.get(module_name)
+            if module is None:
+                continue
+            for attr_name in ("log_broker", "LogBroker", "_log_broker"):
+                obj = getattr(module, attr_name, None)
+                if obj is not None and hasattr(obj, "register"):
+                    return obj
+        return None
+
+    async def _activate_log_broker(self, log_broker: Any) -> None:
+        self._log_broker = log_broker
+        self._log_broker_queue = log_broker.register()
+        self._log_broker_enabled = True
+        if hasattr(log_broker, "log_cache"):
+            try:
+                cached = list(log_broker.log_cache)
+            except Exception:
+                cached = []
+            async with self._log_broker_lock:
+                self._log_broker_cache.clear()
+                for item in cached:
+                    self._log_broker_cache.append(item)
+                    self._log_broker_line_count += 1
+                self._log_broker_base_line = max(0, self._log_broker_line_count - len(self._log_broker_cache))
+            logger.info("[ObserverPanel] LogBroker 历史缓存 %s 条", len(cached))
+        self._log_broker_task = asyncio.create_task(self._process_log_broker_stream())
+        logger.info("[ObserverPanel] LogBroker fan-in 已启用")
+
+    async def _process_log_broker_stream(self) -> None:
+        if self._log_broker_queue is None:
+            return
+        try:
+            while True:
+                entry = await self._log_broker_queue.get()
+                line = self._format_log_broker_entry(entry)
+                if not line:
+                    continue
+                async with self._log_broker_lock:
+                    self._log_broker_cache.append(entry if not isinstance(entry, str) else {"message": entry})
+                    self._log_broker_pending_lines.append(line)
+                    self._log_broker_line_count += 1
+                    # 控制 base：缓存窗口滑动
+                    if len(self._log_broker_cache) >= LOGBROKER_CACHE_MAX:
+                        self._log_broker_base_line = max(
+                            0, self._log_broker_line_count - LOGBROKER_CACHE_MAX
+                        )
+        except asyncio.CancelledError:
+            logger.debug("[ObserverPanel] LogBroker 消费任务已取消")
+        except Exception as exc:
+            logger.warning("[ObserverPanel] LogBroker 消费错误: %s", exc, exc_info=True)
+            self._log_broker_enabled = False
+
+    async def _cleanup_log_broker(self) -> None:
+        if self._log_broker_task is not None:
+            self._log_broker_task.cancel()
+            try:
+                await self._log_broker_task
+            except asyncio.CancelledError:
+                pass
+            self._log_broker_task = None
+
+        if self._log_broker is not None and self._log_broker_queue is not None:
+            try:
+                self._log_broker.unregister(self._log_broker_queue)
+            except Exception as exc:
+                logger.debug("[ObserverPanel] 注销 LogBroker 失败: %s", exc)
+        self._log_broker = None
+        self._log_broker_queue = None
+        self._log_broker_enabled = False
+        async with self._log_broker_lock:
+            self._log_broker_cache.clear()
+            self._log_broker_pending_lines.clear()
+            self._log_broker_line_count = 0
+            self._log_broker_base_line = 0

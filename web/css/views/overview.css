@@ -1,9 +1,123 @@
 .big-screen-panel,
 .overview-live-layout,
+.overview-hero-panel,
 .important-panel,
 .log-insight-layout,
 .runtime-stats-layout {
   margin-bottom: 16px;
+}
+
+/* —— 总览首屏：健康条 + 资源网格 —— */
+.overview-hero-panel .panel-head {
+  margin-bottom: 0;
+}
+
+.health-strip {
+  margin: 12px 14px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  transition: border-color var(--duration-normal) var(--ease-out),
+              background-color var(--duration-normal) var(--ease-out),
+              box-shadow var(--duration-normal) var(--ease-out);
+}
+
+.health-strip-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.health-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-bright);
+  background: var(--surface);
+}
+
+.health-strip-main strong {
+  color: var(--text-bright);
+  font-size: 15px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.health-strip-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.health-strip.is-ok {
+  border-color: color-mix(in srgb, var(--provider) 55%, var(--line));
+  border-left: 3px solid var(--provider);
+  background: color-mix(in srgb, var(--provider) 8%, var(--surface-2));
+}
+
+.health-strip.is-ok .health-badge {
+  border-color: var(--provider);
+  color: var(--provider);
+}
+
+.health-strip.is-warn {
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--line));
+  border-left: 3px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface-2));
+}
+
+.health-strip.is-warn .health-badge {
+  border-color: var(--warn);
+  color: var(--warn-bright, var(--warn));
+}
+
+.health-strip.is-bad {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+  border-left: 3px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface-2));
+}
+
+.health-strip.is-bad .health-badge {
+  border-color: var(--danger);
+  color: var(--danger-bright, var(--danger));
+}
+
+.overview-resource-grid {
+  padding: 12px 14px 14px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.overview-resource-grid .resource-card {
+  min-height: 96px;
+}
+
+.overview-resource-grid .resource-card.ok {
+  border-left: 3px solid var(--provider);
+}
+
+.overview-resource-grid .resource-card.warn {
+  border-left: 3px solid var(--warn);
+}
+
+.overview-resource-grid .resource-card.bad {
+  border-left: 3px solid var(--danger);
 }
 
 .big-screen-grid {
@@ -12,6 +126,11 @@
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
+
+.big-screen-grid.is-empty .function-card strong {
+  color: var(--muted);
+}
+
 .astrbot-sections {
   margin-bottom: 14px;
 }
@@ -234,7 +353,22 @@
   margin: 0;
 }
 
+/* 首屏入场：按 data-enter-order stagger */
+#overview.overview-entering .overview-enter-block {
+  animation: fadeInUp var(--motion-enter-duration) var(--ease-out) both;
+}
 
+#overview.overview-entering .overview-enter-block[data-enter-order="0"] {
+  animation-delay: 0ms;
+}
+
+#overview.overview-entering .overview-enter-block[data-enter-order="1"] {
+  animation-delay: 90ms;
+}
+
+#overview.overview-entering .overview-enter-block[data-enter-order="2"] {
+  animation-delay: 180ms;
+}
 
 .function-card.animate-in,
 .resource-card.animate-in {
@@ -249,4 +383,50 @@
 .function-card:hover strong {
   transform: scale(1.05);
   color: var(--info-bright);
+}
+
+body.anim-off #overview.overview-entering .overview-enter-block,
+body.anim-off .function-card.animate-in,
+body.anim-off .resource-card.animate-in {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+@media (max-width: 1100px) {
+  .overview-resource-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .health-strip {
+    margin: 10px 10px 0;
+    padding: 12px;
+  }
+
+  .overview-resource-grid {
+    padding: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .health-strip-main {
+    width: 100%;
+  }
+
+  .health-strip-meta {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #overview.overview-entering .overview-enter-block,
+  .function-card.animate-in,
+  .resource-card.animate-in {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }

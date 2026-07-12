@@ -55,7 +55,7 @@ body.edit-mode .panel .panel-head::before {
   gap: 10px;
 }
 
-/* 详情关闭按钮：桌面常驻列不需要，仅移动/平板抽屉态显示 */
+/* 详情关闭按钮：桌面/平板常驻列不需要；默认隐藏 */
 .detail-close-btn {
   display: none;
   min-height: 28px;

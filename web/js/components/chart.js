@@ -2,8 +2,8 @@
 // 组件 - 条形图
 // ============================================================================
 
-import { renderSignature, emptyBlock } from "../utils/dom.js?v=20260709-mobile2";
-import { animateFillWidth } from "../utils/motion.js?v=20260709-mobile2";
+import { renderSignature, emptyBlock } from "../utils/dom.js?v=20260709-stream4";
+import { animateFillWidth } from "../utils/motion.js?v=20260709-stream4";
 
 function chartSignature(items) {
   return [

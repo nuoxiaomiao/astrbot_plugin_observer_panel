@@ -93,23 +93,23 @@ body.sidebar-collapsed .sidebar-collapse-btn {
   display: none;
 }
 
-/* 汉堡菜单默认隐藏，仅在移动端显示 */
+/* 汉堡菜单默认隐藏，仅在平板/手机显示 */
 .mobile-menu-btn {
   display: none !important;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 980px) {
   .mobile-menu-btn {
     display: inline-flex !important;
   }
 
-  /* 移动端抽屉由汉堡菜单控制，隐藏桌面折叠按钮 */
+  /* 抽屉由汉堡菜单控制，隐藏桌面折叠按钮 */
   .sidebar-collapse-btn,
   .sidebar-expand-btn {
     display: none !important;
   }
 
-  /* 顶部副标题在移动端隐藏，避免空间不足 */
+  /* 顶部副标题在窄屏隐藏，避免空间不足 */
   #workspaceMeta {
     display: none;
   }
@@ -117,42 +117,47 @@ body.sidebar-collapsed .sidebar-collapse-btn {
 
 /* ==================== Responsive Breakpoints ==================== */
 
-/* Tablet breakpoint - Hide detail panel, make it slide-in */
-@media (max-width: 1400px) {
+/* 平板 981–1400：与 PC 相同三列（侧栏 | 主区 | 详情），不做详情抽屉。
+   显式覆盖全局 280/360 为稍窄侧栏；折叠/隐藏规则与 PC 语义一致，避免预留空列。 */
+@media (max-width: 1400px) and (min-width: 981px) {
   .shell {
-    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-columns: 260px minmax(0, 1fr) 360px;
   }
 
-  /* Detail panel becomes fixed overlay sliding from right */
+  body.detail-hidden .shell {
+    grid-template-columns: 260px minmax(0, 1fr) 0px;
+  }
+
+  body.sidebar-collapsed .shell {
+    grid-template-columns: 0px minmax(0, 1fr) 360px;
+  }
+
+  body.sidebar-collapsed.detail-hidden .shell {
+    grid-template-columns: 0px minmax(0, 1fr) 0px;
+  }
+
+  /* 详情在网格列内常驻（覆盖任何遗留 fixed/抽屉样式） */
   .workspace-detail {
-    position: fixed;
-    right: -100%;
-    top: 0;
-    height: 100%;
-    width: 360px;
-    transition: right var(--duration-normal) var(--ease-out);
-    z-index: 1000;
-    background: var(--bg);
-    box-shadow: var(--shadow-lg);
+    position: static;
+    right: auto;
+    top: auto;
+    left: auto;
+    width: auto;
+    max-width: none;
+    height: auto;
+    min-height: calc(100vh - 24px);
+    box-shadow: none;
+    z-index: auto;
   }
 
-  .workspace-detail.open {
-    right: 0;
-  }
-
-  /* Backdrop overlay when detail panel is open */
   body.detail-open::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    z-index: 999;
-    animation: fadeIn var(--motion-view-duration, 0.22s);
+    content: none;
+    display: none;
   }
 }
 
-/* Mobile breakpoint - Single column, sidebar slide-in */
-@media (max-width: 768px) {
+/* ≤980：单列 + 侧栏抽屉（覆盖原 980 流式侧栏占满首屏） */
+@media (max-width: 980px) {
   .shell {
     grid-template-columns: 1fr;
     padding: 8px;
@@ -165,12 +170,16 @@ body.sidebar-collapsed .sidebar-collapse-btn {
     left: -100%;
     top: 0;
     height: 100%;
-    width: 280px;
+    width: min(300px, 86vw);
     transition: left var(--duration-normal) var(--ease-out);
     z-index: 999;
     background: var(--bg);
     box-shadow: var(--shadow-lg);
     padding: 12px;
+    overflow: auto;
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
   }
 
   body.sidebar-open .workspace-sidebar {
@@ -186,12 +195,18 @@ body.sidebar-collapsed .sidebar-collapse-btn {
     animation: fadeIn var(--motion-view-duration, 0.22s);
   }
 
-  .workspace-detail {
-    position: fixed;
-    right: -100%;
-    width: 100%;
-    max-width: 360px;
+  body.sidebar-collapsed .workspace-sidebar {
+    visibility: visible;
+    pointer-events: auto;
+    opacity: 1;
   }
+
+  body.sidebar-collapsed .workspace-sidebar > * {
+    transform: none;
+    opacity: 1;
+  }
+
+  /* 详情：≤980 由 mobile.css 内联堆叠；此处不再做 fixed 抽屉 */
 
   .workspace-main {
     min-height: auto;
@@ -206,7 +221,7 @@ body.sidebar-collapsed .sidebar-collapse-btn {
     grid-template-columns: 1fr;
   }
 
-  /* Disable hover effects on mobile for better touch experience */
+  /* Disable hover effects on touch-oriented widths */
   .panel:hover {
     transform: none;
     border-color: var(--line);
@@ -453,6 +468,34 @@ body.compact .log-entry {
   animation: breathe 2s ease-in-out infinite;
 }
 
+/* 侧栏点色随日志流状态变化 */
+.sidebar-status[data-log-stream-status="pending"] .status-dot,
+.sidebar-status[data-log-stream-status="connecting"] .status-dot,
+.sidebar-status[data-log-stream-status="reconnecting"] .status-dot {
+  background: var(--warn, #f0b429);
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--warn, #f0b429) 45%, transparent);
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+.sidebar-status[data-log-stream-status="connected"] .status-dot,
+.sidebar-status[data-log-stream-status="streaming"] .status-dot {
+  background: var(--ok, #3dd68c);
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--ok, #3dd68c) 45%, transparent);
+}
+
+.sidebar-status[data-log-stream-status="degraded"] .status-dot {
+  background: var(--bad, #f07178);
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--bad, #f07178) 45%, transparent);
+  animation: none;
+}
+
+.sidebar-status[data-log-stream-status="disabled"] .status-dot,
+.sidebar-status[data-log-stream-status="stopped"] .status-dot {
+  background: var(--muted);
+  box-shadow: none;
+  animation: none;
+}
+
 .sidebar-status > span:not(.status-dot) {
   color: var(--muted);
   font-size: 12px;
@@ -510,14 +553,14 @@ body.privacy-mode .log-entry-details {
   }
 }
 
-/* Standard tablet - single column layouts */
+/* Standard tablet - single column layouts（侧栏抽屉见上方 ≤980 规则） */
 @media (max-width: 980px) {
   .shell {
     padding: 14px;
     grid-template-columns: 1fr;
   }
 
-  .workspace-sidebar,
+  /* 勿把 fixed 侧栏 height 改成 auto，否则抽屉撑不满 */
   .workspace-main,
   .workspace-detail,
   .detail-panel {

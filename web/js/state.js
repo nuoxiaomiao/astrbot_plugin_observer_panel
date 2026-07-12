@@ -16,6 +16,7 @@ export const state = {
   },
   refreshing: false,
   pendingRefresh: false,
+  pendingForceLogs: false,
   logRefreshing: false,
   pendingLogRefresh: false,
   refreshError: null,  // 记录刷新错误信息
@@ -33,6 +34,15 @@ export const state = {
   logRegex: false,
   logTimeFrom: null,
   logTimeTo: null,
+  logScrollLocked: false,
+  pendingScrollHighlight: false,
+  logStream: {
+    status: "idle", // idle | pending | connecting | connected | streaming | reconnecting | degraded | disabled | stopped
+    detail: "",
+    es: null,
+    lastEventAt: 0,
+    connectTimer: null,
+  },
   ui: {
     runningTimeoutMs: 10 * 60 * 1000,
     slowSessionMs: 30 * 1000,

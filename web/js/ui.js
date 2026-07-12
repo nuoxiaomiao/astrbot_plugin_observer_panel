@@ -2,21 +2,21 @@
 // UI 交互
 // ============================================================================
 
-import { state } from "./state.js?v=20260709-mobile2";
+import { state } from "./state.js?v=20260709-stream4";
 import {
   SIDEBAR_COLLAPSED_KEY,
   COMPACT_KEY,
   THEME_KEY,
   DRAG_LAYOUT_PREFIX,
   SHORTCUT_KEY_LABELS,
-} from "./config.js?v=20260709-mobile2";
-import { formatBytes, formatPercent, shortUptime, usageKind, diagnosticLabel, formatCompactLogTime } from "./utils/format.js?v=20260709-mobile2";
+} from "./config.js?v=20260709-stream4";
+import { formatBytes, formatPercent, shortUptime, usageKind, diagnosticLabel, formatCompactLogTime } from "./utils/format.js?v=20260709-stream4";
 import {
   $,
   setText,
   toast,
-} from "./utils/dom.js?v=20260709-mobile2";
-import { compactText } from "./utils/log-text.js?v=20260709-mobile2";
+} from "./utils/dom.js?v=20260709-stream4";
+import { compactText } from "./utils/log-text.js?v=20260709-stream4";
 
 // ============================================================================
 // 侧边栏折叠（2.1）
@@ -93,19 +93,18 @@ export function bindSidebarToggle() {
     }
   });
 
-  // 详情抽屉：关闭按钮 + 点击遮罩关闭（平板断点滑出态）
+  // 详情关闭：按钮仍绑定；点击遮罩关抽屉仅在仍存在 detail-open 时兜底
   const detailCloseBtn = $("detailClose");
   if (detailCloseBtn) {
     detailCloseBtn.addEventListener("click", () => closeDetailPanel());
   }
   document.addEventListener("click", (e) => {
-    if (document.body.classList.contains("detail-open")) {
-      const detail = document.querySelector(".workspace-detail");
-      const eventItem = e.target.closest?.(".event-item");
-      // 点击详情面板内部或触发选中的事件项时不关闭
-      if (detail && !detail.contains(e.target) && !eventItem) {
-        closeDetailPanel();
-      }
+    // 常驻详情列（桌面/平板）不会挂 detail-open；仅遗留抽屉态才需要点遮罩关闭
+    if (!document.body.classList.contains("detail-open")) return;
+    const detail = document.querySelector(".workspace-detail");
+    const eventItem = e.target.closest?.(".event-item");
+    if (detail && !detail.contains(e.target) && !eventItem) {
+      closeDetailPanel();
     }
   });
 
@@ -134,6 +133,7 @@ export function bindMetricJump(selectTab) {
       }
     });
     if (!metric.hasAttribute("tabindex")) metric.setAttribute("tabindex", "0");
+    if (!metric.hasAttribute("role")) metric.setAttribute("role", "button");
   });
 }
 
@@ -646,24 +646,22 @@ function showShortcutsHelpOverlay() {
   document.body.appendChild(overlay);
 
   const closeBtn = overlay.querySelector(".shortcuts-close");
-  const dialog = overlay.querySelector(".shortcuts-dialog");
+
+  const onKeydown = (e) => {
+    if (e.key === "Escape") closeOverlay();
+  };
 
   const closeOverlay = () => {
+    document.removeEventListener("keydown", onKeydown);
     overlay.classList.add("closing");
     window.setTimeout(() => overlay.remove(), 200);
   };
 
-  closeBtn.addEventListener("click", closeOverlay);
+  closeBtn?.addEventListener("click", closeOverlay);
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) closeOverlay();
   });
-
-  document.addEventListener("keydown", function escHandler(e) {
-    if (e.key === "Escape") {
-      closeOverlay();
-      document.removeEventListener("keydown", escHandler);
-    }
-  });
+  document.addEventListener("keydown", onKeydown);
 
   window.setTimeout(() => overlay.classList.add("visible"), 10);
 }
@@ -678,14 +676,17 @@ export function addLoadingState(element, type = "default") {
   element.setAttribute("aria-busy", "true");
 
   if (type === "skeleton") {
+    // 已有骨架则不重复插入；渲染函数会整体替换内容
+    if (element.querySelector(":scope > .skeleton-loader")) return;
     const skeleton = document.createElement("div");
     skeleton.className = "skeleton-loader";
+    skeleton.setAttribute("aria-hidden", "true");
     skeleton.innerHTML = `
       <div class="skeleton-line"></div>
       <div class="skeleton-line"></div>
       <div class="skeleton-line short"></div>
     `;
-    element.dataset.originalContent = element.innerHTML;
+    // 不缓存 originalContent：remove 时回写会覆盖刚渲染的数据
     element.innerHTML = "";
     element.appendChild(skeleton);
   }
@@ -695,14 +696,14 @@ export function removeLoadingState(element) {
   if (!element) return;
   element.classList.remove("loading");
   element.removeAttribute("aria-busy");
-
-  if (element.dataset.originalContent) {
-    element.innerHTML = element.dataset.originalContent;
-    delete element.dataset.originalContent;
+  // 只摘掉骨架节点；若 render* 已写入新 DOM，绝不能用旧 HTML 回写
+  for (const node of [...element.querySelectorAll(":scope > .skeleton-loader")]) {
+    node.remove();
   }
+  delete element.dataset.originalContent;
 }
 
-import { renderDetailPanel } from "./components/event-list.js?v=20260709-mobile2";
+import { renderDetailPanel } from "./components/event-list.js?v=20260709-stream4";
 
 // ============================================================================
 // 详情面板

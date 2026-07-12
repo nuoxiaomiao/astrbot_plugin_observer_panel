@@ -2,7 +2,7 @@
 // 日志分析与 trace 洞察
 // ============================================================================
 
-import { state } from "../state.js?v=20260709-mobile2";
+import { state } from "../state.js?v=20260709-stream4";
 import {
   DEFAULT_SLOW_SESSION_MS,
   DEFAULT_SLOW_TOOL_MS,
@@ -13,19 +13,27 @@ import {
   MODULE_PREFIX_LABELS,
   TRACE_ACTION_LABELS,
   EVENT_TYPES,
-} from "../config.js?v=20260709-mobile2";
-import { average } from "../utils/format.js?v=20260709-mobile2";
+} from "../config.js?v=20260709-stream4";
+import { average } from "../utils/format.js?v=20260709-stream4";
 import {
   compactText,
   compactJson,
   safeObject,
   bracketParts,
-} from "../utils/log-text.js?v=20260709-mobile2";
-import { getLogSearchText, detailKey, stableKeyText } from "../utils/dom.js?v=20260709-mobile2";
-import { buildLogEntries } from "./parser.js?v=20260709-mobile2";
-import { logFilesSignature, recentAnalysisEntries } from "./cache.js?v=20260709-mobile2";
+} from "../utils/log-text.js?v=20260709-stream4";
+import { getLogSearchText, detailKey, stableKeyText } from "../utils/dom.js?v=20260709-stream4";
+import { buildLogEntries } from "./parser.js?v=20260709-stream4";
+import { logFilesSignature, recentAnalysisEntries } from "./cache.js?v=20260709-stream4";
+import {
+  rememberSessionReasoning,
+  hydrateSessionReasoning,
+  evictReasoningSticky,
+} from "./reasoning-cache.js?v=20260709-stream4";
 
-const SPLIT_SESSION_MERGE_WINDOW_MS = 2 * 60 * 1000;
+const SPLIT_SESSION_MERGE_WINDOW_MS = 3 * 60 * 1000;
+/** pre-agent 非 Poke 会话可见窗口；Poke 更短，避免列表长期「进行中」 */
+const PRE_AGENT_VISIBLE_MS = 2 * 60 * 1000;
+const PRE_AGENT_POKE_VISIBLE_MS = 30 * 1000;
 
 export function getLogAnalysis(files) {
   const signature = logFilesSignature(files);
@@ -46,6 +54,10 @@ export function buildLogTextMatcher() {
   const textFilter = getLogSearchText();
   if (!textFilter) return null;
   if (state.logRegex) {
+    if (isUnsafeUserRegex(textFilter)) {
+      // 过长/高风险模式：回退子串，避免 ReDoS 卡死主线程
+      return { substr: textFilter, raw: textFilter, unsafe: true };
+    }
     try {
       // 正则模式：原样使用用户输入（区分大小写由用户用 (?i) 控制）
       return { regex: new RegExp(textFilter), raw: textFilter };
@@ -57,9 +69,29 @@ export function buildLogTextMatcher() {
   return { substr: textFilter, raw: textFilter };
 }
 
+/** 用户正则长度与嵌套量词启发式，拦截常见灾难性回溯 */
+const MAX_LOG_REGEX_LENGTH = 120;
+
+function isUnsafeUserRegex(source) {
+  const s = String(source || "");
+  if (s.length > MAX_LOG_REGEX_LENGTH) return true;
+  // 相邻量词 / 量词叠量词
+  if (/(\+|\*|\}|\?)\s*(\+|\*|\{)/.test(s)) return true;
+  // (…+…)+ 类嵌套
+  if (/\((?:[^()\\]|\\.)*[+*](?:[^()\\]|\\.)*\)[+*{]/.test(s)) return true;
+  const quantifiers = s.match(/[+*?]|\{(?:\d+,?\d*|\d*,\d+)\}/g);
+  if (quantifiers && quantifiers.length > 12) return true;
+  return false;
+}
+
 export function matchLogText(haystack, matcher) {
   if (!matcher) return true;
-  if (matcher.regex) return matcher.regex.test(haystack);
+  if (matcher.regex) {
+    const re = matcher.regex;
+    // global 正则 .test 会推进 lastIndex，过滤多行时需复位
+    if (re.global) re.lastIndex = 0;
+    return re.test(haystack);
+  }
   return haystack.includes(matcher.substr);
 }
 
@@ -465,17 +497,68 @@ function canMergeSplitSession(source, target) {
 
   const sourceKey = splitSessionMessageKey(source);
   const targetKey = splitSessionMessageKey(target);
-  if (!sourceKey || sourceKey !== targetKey) return false;
+  // 两侧都有 messageOutline 时要求一致；一侧为空时放宽为仅比 sender
+  if (sourceKey && targetKey && sourceKey !== targetKey) return false;
+  if (!sourceKey && !targetKey) {
+    const sourceSender = String(source.senderName || "").trim().toLowerCase();
+    const targetSender = String(target.senderName || "").trim().toLowerCase();
+    if (!sourceSender || !targetSender || sourceSender !== targetSender) return false;
+  } else if (!sourceKey || !targetKey) {
+    const sourceSender = String(source.senderName || "").trim().toLowerCase();
+    const targetSender = String(target.senderName || "").trim().toLowerCase();
+    if (sourceSender && targetSender && sourceSender !== targetSender) return false;
+  }
 
   const sourceUmo = String(source.umo || "").trim();
   const targetUmo = String(target.umo || "").trim();
+  // umo 一侧为空时不拦截；两侧都有才要求一致
   if (sourceUmo && targetUmo && sourceUmo !== targetUmo) return false;
 
   const sourceStart = sessionStartMs(source);
   const targetStart = sessionStartMs(target);
   if (!sourceStart || !targetStart) return false;
-  const delta = targetStart - sourceStart;
-  return delta >= 0 && delta <= SPLIT_SESSION_MERGE_WINDOW_MS;
+  const delta = Math.abs(targetStart - sourceStart);
+  return delta <= SPLIT_SESSION_MERGE_WINDOW_MS;
+}
+
+function sessionIsPokeMessage(session) {
+  return POKE_MESSAGE_PATTERN.test(String(session?.messageOutline || ""));
+}
+
+function sessionIdleMs(session, now) {
+  return Math.max(0, now - (session?.lastTs || session?.startTs || 0));
+}
+
+function sessionIsStaleOpen(session, now, runningTimeoutMs) {
+  if (!session) return false;
+  if (session.status === "complete" || session.status === "error" || session.status === "stale") return false;
+  if (session.status !== "running" && session.status !== "generating") return false;
+  // 仅对已进入 Agent 的会话做 stale 收口；pre-agent 超时直接不可见
+  if (!session.enteredAgentFlow && !session.completed) return false;
+  return sessionIdleMs(session, now) > runningTimeoutMs;
+}
+
+function markStaleSessions(sessionList, now, runningTimeoutMs) {
+  sessionList.forEach((session) => {
+    if (!sessionIsStaleOpen(session, now, runningTimeoutMs)) return;
+    // 仅投影收口：不改写 trace，只改展示状态
+    session.status = "stale";
+    session.stale = true;
+  });
+}
+
+function isPreAgentVisible(session, now) {
+  if (!session?.hasMessageInTrace || session.status !== "running") return false;
+  if (session.enteredAgentFlow || session.completed) return false;
+  // Poke / 明显非 Agent 交互：缩短可见窗口，避免长期占列表
+  const limit = sessionIsPokeMessage(session) ? PRE_AGENT_POKE_VISIBLE_MS : PRE_AGENT_VISIBLE_MS;
+  return sessionIdleMs(session, now) <= limit;
+}
+
+/** pre-agent 是否已有可合并的 agent/完成孪生（同 messageKey/sender/umo/时间窗） */
+function hasAgentTwinSession(preAgent, sessionList) {
+  if (!preAgent || !Array.isArray(sessionList) || !sessionList.length) return false;
+  return sessionList.some((candidate) => canMergeSplitSession(preAgent, candidate));
 }
 
 function mergeTimestampMin(...values) {
@@ -640,6 +723,7 @@ export function sessionDisplayStatus(session) {
   if (session.status === "complete" && !sessionHasLoggedTextResponse(session)) return "empty";
   if (session.status === "complete") return "complete";
   if (session.status === "error") return "error";
+  if (session.status === "stale") return "stale";
   if (session.status === "generating") return "generating";
   if (session.status === "running") return "running";
   return "pending";
@@ -913,14 +997,29 @@ function normalizeCompareText(text) {
     .trim();
 }
 
-function textLooksSame(left, right) {
+/**
+ * 严格 response 对齐：相等，或更长侧以完整 shorter 开头/结尾。
+ * 废除任意 includes（≥12 子串），避免并发会话交叉绑定。
+ */
+function responseTextMatches(left, right) {
   const a = normalizeCompareText(left);
   const b = normalizeCompareText(right);
   if (!a || !b) return false;
   if (a === b) return true;
   const shorter = a.length <= b.length ? a : b;
   const longer = a.length > b.length ? a : b;
-  return shorter.length >= 12 && longer.includes(shorter);
+  // 过短文本不做边界扩展匹配，降低误绑
+  if (shorter.length < 12) return false;
+  return longer.startsWith(shorter) || longer.endsWith(shorter);
+}
+
+/** 同 completion / 同正文+思考 时标记为等价候选（用于 used set） */
+function candidatePayloadSame(left, right) {
+  if (!left || !right) return false;
+  if (left.completionId && right.completionId && left.completionId === right.completionId) return true;
+  if (left.reasoningContent !== right.reasoningContent) return false;
+  if (!responseTextMatches(left.responseText, right.responseText)) return false;
+  return Math.abs((left.timestamp || 0) - (right.timestamp || 0)) <= 5000;
 }
 
 /** 统一 entry 时间到毫秒：行内 timestamp 优先，否则 fileMtime(秒)×1000 */
@@ -947,24 +1046,86 @@ const REASONING_FIELD_NAMES = [
 
 const RESPONSE_FIELD_NAMES = ["content", "text", "resp", "response"];
 
+function scoreNaturalLanguageField(value) {
+  const text = String(value || "").trim();
+  if (!text) return -1;
+  // 空对象 / 纯 JSON 工具载荷：低分，避免抢到自然语言 content
+  if (/^[{[][\s\S]*[}\]]$/.test(text) && !/[\u4e00-\u9fff]/.test(text) && text.length < 400) {
+    return Math.min(text.length, 20);
+  }
+  if (text === "{}" || text === "[]" || text === "null" || text === "None") return -1;
+  let score = text.length;
+  if (/[\u4e00-\u9fff]/.test(text)) score += 80;
+  if (/[。！？，、；：]/.test(text)) score += 20;
+  if (/^[{[]/.test(text) && /[}\]]$/.test(text)) score -= 40;
+  return score;
+}
+
+/**
+ * 多段 content= 时取最长/最后非空自然语言，跳过 content={} 与纯 JSON 工具载荷。
+ */
+function extractReprFieldBest(text, fieldNames) {
+  const source = String(text || "");
+  let best = "";
+  let bestScore = -1;
+  for (const fieldName of fieldNames) {
+    const pattern = `${fieldName}=`;
+    let from = 0;
+    while (from < source.length) {
+      const index = source.indexOf(pattern, from);
+      if (index < 0) break;
+      const prev = index > 0 ? source[index - 1] : "";
+      if (prev && /[A-Za-z0-9_]/.test(prev)) {
+        from = index + pattern.length;
+        continue;
+      }
+      const parsed = readReprFieldValue(source, index + pattern.length);
+      if (!parsed) {
+        from = index + pattern.length;
+        continue;
+      }
+      const value = String(parsed.value || "").trim();
+      const score = scoreNaturalLanguageField(value);
+      // 同分时取后出现的（通常是最终回复 content，而非 tool payload）
+      if (score > bestScore || (score === bestScore && score >= 0 && value.length >= best.length)) {
+        best = value;
+        bestScore = score;
+      }
+      from = parsed.end;
+    }
+  }
+  return bestScore >= 0 ? best : "";
+}
+
+function extractJsonStringFieldBest(text, fieldNames) {
+  const source = String(text || "");
+  let best = "";
+  let bestScore = -1;
+  for (const fieldName of fieldNames) {
+    const re = new RegExp(
+      `["']${fieldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']\\s*:\\s*("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')`,
+      "ig",
+    );
+    let match;
+    while ((match = re.exec(source))) {
+      const quoted = match[1];
+      const inner = quoted.slice(1, -1);
+      const value = decodeReprString(inner).trim();
+      const score = scoreNaturalLanguageField(value);
+      if (score > bestScore || (score === bestScore && score >= 0 && value.length >= best.length)) {
+        best = value;
+        bestScore = score;
+      }
+    }
+  }
+  return bestScore >= 0 ? best : "";
+}
+
 /**
  * 从日志文本中解析 JSON 风格 "field": "..." 字符串值（支持简单转义）。
  */
 function extractJsonStringField(text, fieldNames) {
-  const source = String(text || "");
-  for (const fieldName of fieldNames) {
-    const re = new RegExp(
-      `["']${fieldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']\\s*:\\s*("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')`,
-      "i",
-    );
-    const match = source.match(re);
-    if (!match) continue;
-    const quoted = match[1];
-    const inner = quoted.slice(1, -1);
-    const value = decodeReprString(inner).trim();
-    if (value) return value;
-  }
-  return "";
+  return extractJsonStringFieldBest(text, fieldNames);
 }
 
 /**
@@ -974,6 +1135,8 @@ function extractJsonObjectField(text, fieldNames) {
   const source = String(text || "");
   const start = source.indexOf("{");
   if (start < 0) return "";
+  let best = "";
+  let bestScore = -1;
   // 从首个 { 起尝试若干截断解析，避免全行非 JSON 时白跑
   for (const end of [source.lastIndexOf("}"), source.length - 1]) {
     if (end <= start) continue;
@@ -986,7 +1149,13 @@ function extractJsonObjectField(text, fieldNames) {
         if (!cur || typeof cur !== "object") continue;
         for (const name of fieldNames) {
           const raw = cur[name];
-          if (typeof raw === "string" && raw.trim()) return raw.trim();
+          if (typeof raw !== "string") continue;
+          const value = raw.trim();
+          const score = scoreNaturalLanguageField(value);
+          if (score > bestScore || (score === bestScore && score >= 0 && value.length >= best.length)) {
+            best = value;
+            bestScore = score;
+          }
         }
         Object.values(cur).forEach((child) => {
           if (child && typeof child === "object") queue.push(child);
@@ -996,11 +1165,11 @@ function extractJsonObjectField(text, fieldNames) {
       // ignore
     }
   }
-  return "";
+  return bestScore >= 0 ? best : "";
 }
 
 function extractTextField(raw, fieldNames) {
-  return extractReprField(raw, fieldNames)
+  return extractReprFieldBest(raw, fieldNames)
     || extractJsonStringField(raw, fieldNames)
     || extractJsonObjectField(raw, fieldNames)
     || "";
@@ -1056,47 +1225,45 @@ function candidateSortForSession(referenceTs) {
   };
 }
 
+function candidateLooksLikeJsonPayload(candidate) {
+  const text = String(candidate?.responseText || "").trim();
+  if (!text) return false;
+  if (text === "{}" || text === "[]") return true;
+  return /^[{[]/.test(text) && /[}\]]$/.test(text) && !/[\u4e00-\u9fff]/.test(text) && text.length < 400;
+}
+
 /**
- * 多候选时：response 匹配优先；否则取时间最近（completion 优先）。
- * 无 session.response 时提高弃绑门槛，降低并发 empty 会话错挂。
- * 若最近两条时间差 < 2s 且思考正文不同，放弃以免错挂。
+ * 多候选时：有 session.response 则仅严格 response 匹配；
+ * 多命中且思考内容不同 → 弃绑；无 response 时仅单候选可绑。
  */
 function selectReasoningCandidate(windowCandidates, session, referenceTs) {
   if (!windowCandidates.length) return null;
-  const hasResponse = Boolean(String(session.response || "").trim());
-  const responseMatches = hasResponse
-    ? windowCandidates.filter((candidate) => textLooksSame(session.response, candidate.responseText))
-    : [];
-  if (responseMatches.length) {
+  const sessionResponse = String(session.response || "").trim();
+  const hasResponse = Boolean(sessionResponse);
+  const sessionLooksNatural = hasResponse && scoreNaturalLanguageField(sessionResponse) >= 40;
+
+  if (hasResponse) {
+    const responseMatches = windowCandidates.filter((candidate) => {
+      if (!responseTextMatches(sessionResponse, candidate.responseText)) return false;
+      // 侧路 JSON / 空对象 dump 不得挂到自然语言回复会话
+      if (sessionLooksNatural && candidateLooksLikeJsonPayload(candidate)) return false;
+      return true;
+    });
+    if (!responseMatches.length) return null;
+
+    const uniqueContents = new Set(
+      responseMatches.map((candidate) => String(candidate.reasoningContent || "").trim()).filter(Boolean),
+    );
+    // 同一 response 撞上多段不同思考 → 宁可空也不错挂
+    if (uniqueContents.size > 1) return null;
+
     return responseMatches.sort(candidateSortForSession(referenceTs))[0];
   }
-  const sorted = [...windowCandidates].sort(candidateSortForSession(referenceTs));
-  if (sorted.length === 1) return sorted[0];
 
-  // 无正文可匹配时：多候选默认不猜；除非最近两条时间分离足够大
-  if (!hasResponse) {
-    const best = sorted[0];
-    const second = sorted[1];
-    const bestDelta = Math.abs((best.timestamp || 0) - referenceTs);
-    const secondDelta = Math.abs((second.timestamp || 0) - referenceTs);
-    if (Math.abs(bestDelta - secondDelta) < 5000) return null;
-    if (best.reasoningContent !== second.reasoningContent && Math.abs(bestDelta - secondDelta) < 8000) {
-      return null;
-    }
-    return best;
-  }
-
-  const best = sorted[0];
-  const second = sorted[1];
-  const bestDelta = Math.abs((best.timestamp || 0) - referenceTs);
-  const secondDelta = Math.abs((second.timestamp || 0) - referenceTs);
-  if (
-    Math.abs(bestDelta - secondDelta) < 2000
-    && best.reasoningContent !== second.reasoningContent
-  ) {
-    return null;
-  }
-  return best;
+  // empty 完成：无正文可校验时，单候选且非 JSON side-call 才绑；多候选一律不猜
+  const usable = windowCandidates.filter((candidate) => !candidateLooksLikeJsonPayload(candidate));
+  if (usable.length === 1) return usable[0];
+  return null;
 }
 
 const PLAIN_MESSAGE_CLEANUP_PATTERNS = [
@@ -1453,6 +1620,7 @@ export function buildTraceInsights(entries) {
         reasoningTs: null,
         reasoningTokens: null,
         reasoningSource: "",
+        reasoningCompletionId: "",
         providerId: "",
         model: "",
         enteredAgentFlow: false,
@@ -1508,8 +1676,12 @@ export function buildTraceInsights(entries) {
       target.reasoningTs = source.reasoningTs || null;
       target.reasoningTokens = source.reasoningTokens ?? null;
       target.reasoningSource = source.reasoningSource || "";
+      target.reasoningCompletionId = source.reasoningCompletionId || "";
     } else if (target.reasoningTokens == null && source.reasoningTokens != null) {
       target.reasoningTokens = source.reasoningTokens;
+    }
+    if (!target.reasoningCompletionId && source.reasoningCompletionId) {
+      target.reasoningCompletionId = source.reasoningCompletionId;
     }
 
     if (Array.isArray(source.tools) && source.tools.length) {
@@ -1576,21 +1748,28 @@ export function buildTraceInsights(entries) {
     session.reasoningTs = candidate.timestamp || null;
     session.reasoningTokens = candidate.reasoningTokens ?? session.reasoningTokens ?? null;
     session.reasoningSource = source;
+    session.reasoningCompletionId = candidate.completionId || session.reasoningCompletionId || "";
   }
 
   function attachPlainReasoningToSessions() {
     if (!plainReasoningCandidates.length) return;
     const usedLogEntries = new Set();
-    // 前 60s / 后 30s：覆盖落盘延迟与慢生成；多候选时用 selectReasoningCandidate 而非「必须唯一」
-    const windowBeforeMs = 60 * 1000;
-    const windowAfterMs = 30 * 1000;
+    // 有 response 时窗口略放宽（±120s）；无 response 仍严格（前 60s / 后 30s）
+    // 强 key（有 response）会话优先，避免仅靠时间顺序抢占候选
     const completed = [...sessions.values()]
       .filter((session) => !session.reasoningContent && session.status === "complete")
-      .sort((a, b) => (a.lastTs || 0) - (b.lastTs || 0));
+      .sort((a, b) => {
+        const aHas = Boolean(String(a.response || "").trim()) ? 0 : 1;
+        const bHas = Boolean(String(b.response || "").trim()) ? 0 : 1;
+        return aHas - bHas || (a.lastTs || 0) - (b.lastTs || 0);
+      });
     completed.forEach((session) => {
       const completeEvent = sessionCompleteEvent(session);
       const referenceTs = completeEvent?.timestamp || session.lastTs || session.startTs || 0;
       if (!referenceTs) return;
+      const hasResponse = Boolean(String(session.response || "").trim());
+      const windowBeforeMs = hasResponse ? 120 * 1000 : 60 * 1000;
+      const windowAfterMs = hasResponse ? 120 * 1000 : 30 * 1000;
       const windowCandidates = plainReasoningCandidates.filter((candidate) => {
         if (!candidate.logEntryId || usedLogEntries.has(candidate.logEntryId)) return false;
         const ts = candidate.timestamp || 0;
@@ -1607,13 +1786,23 @@ export function buildTraceInsights(entries) {
           usedLogEntries.add(candidate.logEntryId);
           return;
         }
-        const sameCompletion = selected.completionId && candidate.completionId === selected.completionId;
-        const samePayload = textLooksSame(candidate.responseText, selected.responseText)
-          && candidate.reasoningContent === selected.reasoningContent
-          && Math.abs((candidate.timestamp || 0) - (selected.timestamp || 0)) <= 5000;
-        if (sameCompletion || samePayload) usedLogEntries.add(candidate.logEntryId);
+        if (candidatePayloadSame(candidate, selected)) usedLogEntries.add(candidate.logEntryId);
       });
     });
+  }
+
+  function hydrateAndPersistReasoningSticky() {
+    const activeSpanIds = new Set();
+    for (const session of sessions.values()) {
+      if (session.spanId) activeSpanIds.add(session.spanId);
+      (session.aliasSpanIds || []).forEach((id) => {
+        if (id) activeSpanIds.add(id);
+      });
+      // rebuild 后 dump 可能已出窗：先按 span/alias 回填
+      if (!session.reasoningContent) hydrateSessionReasoning(session);
+      if (session.reasoningContent) rememberSessionReasoning(session);
+    }
+    evictReasoningSticky(activeSpanIds);
   }
 
   traceEntries.forEach((entry) => {
@@ -1661,6 +1850,8 @@ export function buildTraceInsights(entries) {
 
     if (action === "agent_tool_call") {
       session.enteredAgentFlow = true;
+      // 工具调用已进入 Agent，badge 与真实阶段一致：生成中
+      if (session.status === "running") session.status = "generating";
       const call = {
         id: trace.toolCallId || eventKey(spanId, "tool_call", entry),
         spanId,
@@ -1796,6 +1987,8 @@ export function buildTraceInsights(entries) {
 
   mergeSplitSessions();
   attachPlainReasoningToSessions();
+  hydrateAndPersistReasoningSticky();
+  markStaleSessions([...sessions.values()], now, runningTimeoutMs);
 
   const tracedMessageKeys = new Set(
     events
@@ -1814,9 +2007,12 @@ export function buildTraceInsights(entries) {
   const allTraceSessions = [...sessions.values()].sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
   const visibleSessions = allTraceSessions
     .filter((session) => {
+      // 已完成 / 已进入 Agent（含 stale 未完成）：始终可见
       if (session.enteredAgentFlow || session.completed) return true;
-      if (!session.hasMessageInTrace || session.status !== "running") return false;
-      return now - (session.lastTs || 0) <= runningTimeoutMs;
+      // agent 孪生已出现时立刻隐藏 pre-agent，避免一句消息两张并发卡
+      if (hasAgentTwinSession(session, allTraceSessions)) return false;
+      // pre-agent：短窗口 / Poke 更短；超时不展示
+      return isPreAgentVisible(session, now);
     })
     .map((session) => {
       const replyKind = sessionReplyKind(session);
@@ -1828,7 +2024,7 @@ export function buildTraceInsights(entries) {
       };
     });
   const runningSessions = allTraceSessions.filter((session) => {
-    if (session.status === "complete" || session.status === "error") return false;
+    if (session.status === "complete" || session.status === "error" || session.status === "stale") return false;
     return now - (session.lastTs || 0) <= runningTimeoutMs;
   });
   const runningTools = toolCalls.filter((call) => call.status === "running" && now - (call.startTs || 0) <= runningTimeoutMs);

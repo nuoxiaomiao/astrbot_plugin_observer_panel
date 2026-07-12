@@ -2,24 +2,39 @@
 // 入口文件
 // ============================================================================
 
-console.log("[ObserverPanel] main.js loaded, build 20260709-mobile2");
+console.log("[ObserverPanel] main.js loaded, build 20260709-stream4");
 
-import { state } from "./state.js?v=20260709-mobile2";
-import { fetchJson, logsApiPath, fetchQueue } from "./api.js?v=20260709-mobile2";
-import { applyPublicConfig, renderWorkspaceChrome, toast, $ } from "./utils/dom.js?v=20260709-mobile2";
-import { renderSummary } from "./views/overview.js?v=20260709-mobile2";
-import { renderSystem } from "./views/system.js?v=20260709-mobile2";
-import { renderAstrBot } from "./views/astrbot.js?v=20260709-mobile2";
-import { renderLogs } from "./views/logs.js?v=20260709-mobile2";
-import { bindUI, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode, addLoadingState, removeLoadingState } from "./ui.js?v=20260709-mobile2";
-import { initEventListActions } from "./components/event-list.js?v=20260709-mobile2";
-import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260709-mobile2";
-import { transitionViews } from "./utils/motion.js?v=20260709-mobile2";
+import { state } from "./state.js?v=20260709-stream4";
+import { fetchJson, logsApiPath, fetchQueue } from "./api.js?v=20260709-stream4";
+import { applyPublicConfig, renderWorkspaceChrome, toast, $ } from "./utils/dom.js?v=20260709-stream4";
+import { renderSummary } from "./views/overview.js?v=20260709-stream4";
+import { renderSystem } from "./views/system.js?v=20260709-stream4";
+import { renderAstrBot } from "./views/astrbot.js?v=20260709-stream4";
+import { renderLogs } from "./views/logs.js?v=20260709-stream4";
+import { bindUI, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode, addLoadingState, removeLoadingState } from "./ui.js?v=20260709-stream4";
+import { initEventListActions } from "./components/event-list.js?v=20260709-stream4";
+import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260709-stream4";
+import { transitionViews } from "./utils/motion.js?v=20260709-stream4";
+import {
+  bindAuthHooks,
+  bindAuthUi,
+  bootstrapAuth,
+  hideAuthGate,
+  isAuthGateVisible,
+} from "./auth.js?v=20260709-stream4";
+import { clearAuthToken } from "./config.js?v=20260709-stream4";
+import {
+  startLogStream,
+  stopLogStream,
+  isLogStreamBusy,
+  logStreamStatusLabel,
+} from "./log/stream.js?v=20260709-stream4";
 
 const FAST_LOG_REFRESH_MS = 1000;
 
 function logTailLimit() {
-  return Math.max(20, Number(state.config?.astrbot?.tail_lines || 300));
+  // 与后端 astrbot.tail_lines 默认对齐；过小会把 plain reasoning dump 裁掉
+  return Math.max(20, Number(state.config?.astrbot?.tail_lines || 1200));
 }
 
 function mergeLogFile(existing, incoming) {
@@ -49,21 +64,138 @@ function mergeLogFile(existing, incoming) {
   };
 }
 
-function mergeLogData(incoming) {
+function mergeLogData(incoming, { replaceAll = false } = {}) {
   const current = state.logs || {};
   const incomingAstrbot = incoming?.astrbot;
   if (!Array.isArray(incomingAstrbot)) {
     state.logs = { ...current, ...incoming };
     return;
   }
+
+  // 增量 SSE 可能只带变更文件：按 path 合并，保留未出现的现有文件
   const byPath = new Map((current.astrbot || []).map((file) => [file.path, file]));
-  const nextAstrBot = incomingAstrbot.map((file) => mergeLogFile(byPath.get(file.path), file));
+  for (const file of incomingAstrbot) {
+    if (!file?.path) continue;
+    byPath.set(file.path, mergeLogFile(byPath.get(file.path), file));
+  }
+
+  let nextAstrBot;
+  if (replaceAll) {
+    // snapshot：以服务端列表顺序为准，仍合并内容
+    const seen = new Set();
+    nextAstrBot = [];
+    for (const file of incomingAstrbot) {
+      if (!file?.path || seen.has(file.path)) continue;
+      seen.add(file.path);
+      nextAstrBot.push(byPath.get(file.path) || file);
+    }
+  } else {
+    nextAstrBot = Array.from(byPath.values());
+  }
+
   state.logs = {
     ...current,
     ...incoming,
     astrbot: nextAstrBot,
   };
 }
+
+function updateLogModeUi() {
+  const label = logStreamStatusLabel();
+  const modeEl = document.getElementById("logModeStatusText");
+  if (modeEl) modeEl.textContent = label;
+  const modeRoot = document.querySelector(".log-mode-status");
+  const streamStatus = state.logStream?.status || "idle";
+  if (modeRoot) {
+    modeRoot.dataset.status = streamStatus;
+  }
+
+  // 左侧原位置统一展示流/文件模式状态，避免被「在线 · 时间」冲掉
+  const statusText = document.getElementById("sidebarStatusText");
+  if (statusText) {
+    statusText.textContent = label;
+  }
+  const statusRoot = document.querySelector(".sidebar-status");
+  if (statusRoot) {
+    statusRoot.dataset.logStreamStatus = streamStatus;
+  }
+}
+
+function shouldSkipHttpLogFetch() {
+  // connecting 阶段 SSE 已发起，避免与 HTTP 并发 merge
+  return isLogStreamBusy();
+}
+
+function clearLogStreamConnectTimer() {
+  const timer = state.logStream?.connectTimer;
+  if (timer != null) {
+    window.clearTimeout(timer);
+    state.logStream.connectTimer = null;
+  }
+}
+
+function isLogStreamDisabledByConfig() {
+  if (state.config && state.config.log_stream_enabled === false) return true;
+  if (state.config?.log_stream && state.config.log_stream.enabled === false) return true;
+  return false;
+}
+
+/**
+ * 统一入口：断流 →（可选强制）文件基线 → pending 倒计时 → 增量 SSE
+ * 首屏与主 Tab 切页共用，避免两套状态机。
+ */
+function rearmFileBaselineThenStream({ forceFileRefresh = false } = {}) {
+  clearLogStreamConnectTimer();
+  // 先停 SSE，保证 shouldSkipHttpLogFetch() 为 false，后续 HTTP logs 可打通
+  stopLogStream();
+
+  if (isLogStreamDisabledByConfig()) {
+    state.logStream.status = "disabled";
+    state.logStream.detail = "";
+    updateLogModeUi();
+    if (forceFileRefresh) {
+      refresh(true, { forceLogs: true });
+    }
+    schedule();
+    return;
+  }
+
+  const delayMs = Math.max(1000, Number(state.refreshMs) || 5000);
+  const delaySec = Math.round(delayMs / 1000);
+  state.logStream.status = "pending";
+  state.logStream.detail = forceFileRefresh
+    ? `文件读取 · ${delaySec}s 后实时流`
+    : `文件基线 · ${delaySec}s 后接入实时流`;
+  updateLogModeUi();
+
+  // 5s 窗口内继续 HTTP 轮询；SSE 已停，不会被 skip
+  schedule();
+  if (forceFileRefresh) {
+    refresh(true, { forceLogs: true });
+  }
+
+  state.logStream.connectTimer = window.setTimeout(() => {
+    state.logStream.connectTimer = null;
+    if (isAuthGateVisible()) return;
+    if (isLogStreamDisabledByConfig()) {
+      state.logStream.status = "disabled";
+      updateLogModeUi();
+      return;
+    }
+    startLogStream({
+      snapshot: false,
+      onPayload: onLogStreamPayload,
+      onStatusChange: onLogStreamStatusChange,
+    });
+    updateLogModeUi();
+  }, delayMs);
+}
+
+/** @deprecated 使用 rearmFileBaselineThenStream */
+function scheduleLogStreamConnect() {
+  rearmFileBaselineThenStream({ forceFileRefresh: false });
+}
+
 
 // 指数退避重试函数
 async function retryWithBackoff(fn, maxRetries = 3) {
@@ -84,15 +216,24 @@ async function retryWithBackoff(fn, maxRetries = 3) {
   throw lastError;
 }
 
-async function refresh(activeOnly = false) {
+async function refresh(activeOnly = false, options = {}) {
+  const forceLogs = Boolean(options.forceLogs);
+  if (isAuthGateVisible()) {
+    state.pendingRefresh = false;
+    return;
+  }
   if (state.refreshing) {
     state.pendingRefresh = true;
+    // 被合并进下一次时，若本次要求强制拉 logs，记到 state，finally 后补拉
+    if (forceLogs) state.pendingForceLogs = true;
     return;
   }
 
   state.refreshing = true;
   state.lastRefreshTime = Date.now();
   state.refreshError = null;  // 清除上次错误
+  const wantForceLogs = forceLogs || Boolean(state.pendingForceLogs);
+  state.pendingForceLogs = false;
 
   // 为关键区域添加骨架屏
   if (!activeOnly) {
@@ -148,16 +289,21 @@ async function refresh(activeOnly = false) {
       }
     }
 
-    // 获取日志数据（可选）
-    if (!activeOnly || ["overview", "astrbot", "logs"].includes(state.activeTab)) {
-      if (state.logRefreshing) {
+    // 获取日志数据（可选）；SSE 已连接时跳过 HTTP 日志，除非 forceLogs / pending 窗口
+    const needLogs = wantForceLogs
+      || !activeOnly
+      || ["overview", "astrbot", "logs"].includes(state.activeTab);
+    if (needLogs) {
+      if (!wantForceLogs && shouldSkipHttpLogFetch()) {
+        state.pendingLogRefresh = false;
+      } else if (state.logRefreshing) {
         state.pendingLogRefresh = true;
       } else {
         try {
           logsRes = await retryWithBackoff(() =>
             fetchQueue.execute(() => fetchJson(logsApiPath()))
           );
-          mergeLogData(logsRes.data);
+          mergeLogData(logsRes.data, { replaceAll: true });
           renderLogs();
         } catch (err) {
           console.error("[ObserverPanel] logs 接口失败", err);
@@ -189,8 +335,9 @@ async function refresh(activeOnly = false) {
     }
 
     if (state.pendingRefresh) {
+      const nextForceLogs = Boolean(state.pendingForceLogs);
       state.pendingRefresh = false;
-      window.setTimeout(() => refresh(true), 500);  // 延迟 500ms 避免立即重复
+      window.setTimeout(() => refresh(true, { forceLogs: nextForceLogs }), 500);
     }
 
     flushPendingLogRefresh();
@@ -203,6 +350,8 @@ function autoRefreshEnabled() {
 }
 
 function shouldFastRefreshLogs() {
+  // SSE 在线时禁止 1s 日志 HTTP 快刷
+  if (shouldSkipHttpLogFetch()) return false;
   return autoRefreshEnabled()
     && state.activeTab === "astrbot"
     && state.astrbotSubTab === "sessions";
@@ -243,10 +392,10 @@ async function refreshLogsOnly() {
 }
 
 function syncDetailVisibility() {
-  // 仅日志页需要右侧详情面板；其他页收起以腾出空间（问题2）
+  // 仅日志页需要右侧详情面板；其他页收起以腾出空间
   const isLogs = state.activeTab === "logs";
   document.body.classList.toggle("detail-hidden", !isLogs);
-  // 离开日志页时，收起可能残留的平板抽屉态（open/detail-open + 遮罩）
+  // 离开日志页时清理可能残留的抽屉 class（历史/兼容）
   if (!isLogs) {
     document.querySelector(".workspace-detail")?.classList.remove("open");
     document.body.classList.remove("detail-open");
@@ -261,7 +410,9 @@ function applyMainViewState(name) {
   });
 }
 
-function selectTab(name) {
+function selectTab(name, options = {}) {
+  const prevTab = state.activeTab;
+  const tabChanged = name !== prevTab;
   state.activeTab = name;
   document.body.classList.remove("sidebar-open");
 
@@ -286,8 +437,20 @@ function selectTab(name) {
 
   syncDetailVisibility();
   renderWorkspaceChrome();
-  refresh(true);
-  schedule();
+
+  // soft：仅切视图（定位原文等），不断 SSE、不强制全量刷新
+  if (options.soft) {
+    return;
+  }
+
+  // 仅日志相关主 Tab 才 rearm；切到 system 保持 SSE，只刷系统数据
+  const LOG_VIEW_TABS = new Set(["overview", "astrbot", "logs"]);
+  if (tabChanged && LOG_VIEW_TABS.has(name)) {
+    rearmFileBaselineThenStream({ forceFileRefresh: true });
+  } else {
+    refresh(true);
+    schedule();
+  }
 }
 
 function selectAstrBotTab(name) {
@@ -352,7 +515,12 @@ function schedule() {
   window.clearInterval(state.logTimer);
   state.timer = null;
   state.logTimer = null;
+  if (isAuthGateVisible()) {
+    state.pendingLogRefresh = false;
+    return;
+  }
   if (autoRefreshEnabled()) {
+    // summary/system 继续轮询；日志在 SSE 连接时由 stream 负责
     state.timer = window.setInterval(() => refresh(true), state.refreshMs);
     if (shouldFastRefreshLogs()) {
       state.logTimer = window.setInterval(() => refreshLogsOnly(), FAST_LOG_REFRESH_MS);
@@ -362,13 +530,47 @@ function schedule() {
   }
 }
 
+function stopPolling() {
+  window.clearInterval(state.timer);
+  window.clearInterval(state.logTimer);
+  state.timer = null;
+  state.logTimer = null;
+  state.pendingRefresh = false;
+  state.pendingLogRefresh = false;
+  state.pendingForceLogs = false;
+  clearLogStreamConnectTimer();
+  stopLogStream();
+  updateLogModeUi();
+}
+
+function onLogStreamPayload(data, type) {
+  mergeLogData(data, { replaceAll: type === "snapshot" });
+  renderLogs();
+  updateLogModeUi();
+}
+
+function onLogStreamStatusChange(status) {
+  updateLogModeUi();
+  // 降级/断开：恢复 logs 轮询；已连接：关掉 logTimer
+  if (status === "connected" || status === "streaming") {
+    window.clearInterval(state.logTimer);
+    state.logTimer = null;
+    state.pendingLogRefresh = false;
+  } else if (status === "degraded" || status === "reconnecting" || status === "disabled" || status === "stopped") {
+    schedule();
+  }
+}
+
 async function progressiveLogInit() {
+  if (isAuthGateVisible()) return;
+
+  // 重入时清掉上一次延迟连流 / SSE，避免双连接
+  clearLogStreamConnectTimer();
+  stopLogStream();
+
   await refresh(false);
 
-  const statusText = document.getElementById("sidebarStatusText");
-  if (statusText) {
-    statusText.textContent = "文件轮询模式";
-  }
+  updateLogModeUi();
 
   if (state.activeTab === "logs" || state.activeTab === "overview") {
     state.logCache.signature = "";
@@ -378,9 +580,17 @@ async function progressiveLogInit() {
   if (window.location.search.includes("token=")) {
     const cleanUrl = `${window.location.pathname}${window.location.hash}`;
     window.history.replaceState({}, document.title, cleanUrl);
+    // 登录 Cookie 已由后端写入；清掉内存 token，后续只靠 Cookie
+    clearAuthToken();
   }
 
+  const logoutBtn = $("logoutBtn");
+  if (logoutBtn) logoutBtn.hidden = !Boolean(state.config?.has_access_token);
+
+  // 先文件轮询保活；约 refreshMs（默认 5s）后再切 SSE 增量（无 snapshot）
+  // 基线已在上面的 refresh(false) 中完成，这里不再强制二次拉文件
   schedule();
+  rearmFileBaselineThenStream({ forceFileRefresh: false });
 }
 
 // 初始化跨组件动作引用，避免循环依赖
@@ -406,10 +616,29 @@ bindUI({
   toggleEditMode,
 });
 
+bindAuthHooks({
+  stopPolling,
+  startApp: async () => {
+    hideAuthGate();
+    await progressiveLogInit();
+  },
+});
+bindAuthUi();
+
 syncDetailVisibility();
 selectAstrBotTab(state.astrbotSubTab);
 
-progressiveLogInit();
+bootstrapAuth().then((result) => {
+  if (result?.config) {
+    applyPublicConfig(result.config);
+  }
+  if (result?.authed) {
+    progressiveLogInit();
+  }
+}).catch((err) => {
+  console.error("[ObserverPanel] 鉴权启动失败", err);
+  progressiveLogInit();
+});
 
 // ============================================================================
 // 动画级别切换（P3）

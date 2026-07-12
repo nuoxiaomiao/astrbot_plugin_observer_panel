@@ -106,12 +106,48 @@
   background: var(--accent);
   transform: scaleX(0);
   transform-origin: left;
-  transition: transform 0.3s var(--ease-out);
+  transition: transform 0.3s var(--ease-out), background 0.3s var(--ease-out);
   border-radius: 0;
 }
 
 .metric:hover::before {
   transform: scaleX(1);
+}
+
+/* 侧栏状态色：顶条反映健康度 */
+.metric.is-ok::before {
+  background: var(--provider);
+  transform: scaleX(1);
+}
+
+.metric.is-warn::before {
+  background: var(--warn-bright, var(--warn));
+  transform: scaleX(1);
+}
+
+.metric.is-bad::before {
+  background: var(--danger-bright, var(--danger));
+  transform: scaleX(1);
+}
+
+.metric.is-ok {
+  border-color: color-mix(in srgb, var(--provider) 35%, var(--line-strong));
+}
+
+.metric.is-warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--line-strong));
+}
+
+.metric.is-bad {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--line-strong));
+}
+
+.metric.is-warn .metric-value {
+  color: var(--warn-bright, var(--warn));
+}
+
+.metric.is-bad .metric-value {
+  color: var(--danger-bright, var(--danger));
 }
 
 /* ==================== 交互增强 ==================== */
