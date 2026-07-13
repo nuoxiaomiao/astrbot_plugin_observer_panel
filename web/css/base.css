@@ -19,9 +19,9 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ==================== CRT 扫描线叠层（战术遥测）==================== */
-/* 极低不透明度、静态、pointer-events:none，不影响交互与可读性；动画关闭时隐藏 */
-body::before {
+/* ==================== CRT 扫描线叠层（仅 anim-full 可选）==================== */
+/* 默认关闭：长时间盯盘疲劳；全开动效时才叠加极低不透明度静态线 */
+body.anim-full::before {
   content: "";
   position: fixed;
   inset: 0;
@@ -31,13 +31,15 @@ body::before {
     0deg,
     rgba(0, 0, 0, 0) 0,
     rgba(0, 0, 0, 0) 2px,
-    rgba(0, 0, 0, 0.05) 2px,
-    rgba(0, 0, 0, 0.05) 3px
+    rgba(0, 0, 0, 0.04) 2px,
+    rgba(0, 0, 0, 0.04) 3px
   );
   mix-blend-mode: multiply;
 }
 
-body.anim-off::before {
+body.anim-off::before,
+body.anim-medium::before {
+  content: none;
   display: none;
 }
 

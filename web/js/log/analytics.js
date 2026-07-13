@@ -470,9 +470,45 @@ export function evidenceDetailKey(event) {
   return detailKey("event-evidence", event.id, event.evidence?.logEntryId);
 }
 
-export function eventDurationLabel(ms) {
-  if (ms == null || !Number.isFinite(Number(ms))) return "";
-  return `耗时 ${(Number(ms) / 1000).toFixed(1)} 秒`;
+export function eventDurationLabel(ms, { prefix = "耗时" } = {}) {
+  if (ms == null || !Number.isFinite(Number(ms)) || Number(ms) < 0) return "";
+  return `${prefix} ${(Number(ms) / 1000).toFixed(1)} 秒`;
+}
+
+/** 端到端墙钟 ms：完成态用 wallMs，live 用 now-startTs */
+export function sessionWallDurationMs(session, now = Date.now()) {
+  if (!session) return null;
+  if (session.wallMs != null && Number.isFinite(Number(session.wallMs))) {
+    return Math.max(0, Number(session.wallMs));
+  }
+  const start = Number(session.startTs || 0);
+  if (!Number.isFinite(start) || start <= 0) return null;
+  const closed = ["complete", "error", "stale"].includes(session.status);
+  const end = closed ? Number(session.lastTs || start) : now;
+  if (!Number.isFinite(end) || end < start) return null;
+  return Math.max(0, end - start);
+}
+
+/** 模型生成段 ms（stats） */
+export function sessionGenerationMs(session) {
+  if (!session) return null;
+  const g = session.generationMs ?? null;
+  if (g != null && Number.isFinite(Number(g)) && Number(g) >= 0) return Number(g);
+  return null;
+}
+
+/**
+ * 展示用「总耗时」：完成/错误优先墙钟，否则生成段；live 用墙钟进行中。
+ */
+export function sessionDisplayDurationMs(session, now = Date.now()) {
+  if (!session) return null;
+  const live = session.displayStatus === "running" || session.displayStatus === "generating"
+    || (session.status !== "complete" && session.status !== "error" && session.status !== "stale"
+      && (session.status === "running" || session.status === "generating"));
+  // displayStatus 可能尚未写入，用 status
+  const isLive = session.status === "running" || session.status === "generating";
+  if (isLive) return sessionWallDurationMs(session, now);
+  return session.wallMs ?? session.durationMs ?? sessionGenerationMs(session);
 }
 
 export function messageDedupeKey(sender, content) {
@@ -1613,6 +1649,8 @@ export function buildTraceInsights(entries) {
         status: "running",
         response: "",
         durationMs: null,
+        generationMs: null,
+        wallMs: null,
         timeToFirstTokenMs: null,
         tokenUsage: {},
         reasoningContent: "",
@@ -1682,6 +1720,18 @@ export function buildTraceInsights(entries) {
     }
     if (!target.reasoningCompletionId && source.reasoningCompletionId) {
       target.reasoningCompletionId = source.reasoningCompletionId;
+    }
+    if (target.generationMs == null && source.generationMs != null) {
+      target.generationMs = source.generationMs;
+    }
+    if (target.wallMs == null && source.wallMs != null) {
+      target.wallMs = source.wallMs;
+    }
+    if (target.durationMs == null && source.durationMs != null) {
+      target.durationMs = source.durationMs;
+    }
+    if (target.timeToFirstTokenMs == null && source.timeToFirstTokenMs != null) {
+      target.timeToFirstTokenMs = source.timeToFirstTokenMs;
     }
 
     if (Array.isArray(source.tools) && source.tools.length) {
@@ -1923,8 +1973,12 @@ export function buildTraceInsights(entries) {
       session.enteredAgentFlow = true;
       session.completed = true;
       session.response = trace.response || "";
-      session.durationMs = trace.durationMs;
-      session.timeToFirstTokenMs = trace.timeToFirstTokenMs;
+      // generationMs = stats 生成段；wallMs = 端到端（startTs→本事件）
+      session.generationMs = trace.generationMs ?? trace.durationMs ?? null;
+      session.timeToFirstTokenMs = trace.timeToFirstTokenMs ?? null;
+      if (session.timeToFirstTokenMs != null && Number(session.timeToFirstTokenMs) <= 0) {
+        session.timeToFirstTokenMs = null;
+      }
       session.tokenUsage = trace.tokenUsage || {};
       if (trace.reasoningContent) {
         session.reasoningContent = trace.reasoningContent;
@@ -1935,6 +1989,13 @@ export function buildTraceInsights(entries) {
       }
       session.providerId = trace.providerId || session.providerId;
       session.model = trace.model || session.model;
+      session.lastTs = Math.max(session.lastTs || 0, ts || 0);
+      if (session.startTs && session.lastTs >= session.startTs) {
+        session.wallMs = Math.max(0, session.lastTs - session.startTs);
+      }
+      // durationMs 兼容字段 = 总耗时（墙钟优先）
+      session.durationMs = session.wallMs ?? session.generationMs ?? null;
+      const genMs = session.generationMs;
       pushSessionEvent(session, {
         id: eventKey(spanId, "message_out", entry),
         timestamp: ts,
@@ -1942,13 +2003,19 @@ export function buildTraceInsights(entries) {
         type: "message_out",
         title: "发送回复",
         detail: compactText(trace.response || "回复内容未记录", 220),
-        meta: trace.durationMs == null ? "" : `生成${eventDurationLabel(trace.durationMs)}`,
-        durationMs: trace.durationMs,
+        meta: [
+          session.wallMs != null ? eventDurationLabel(session.wallMs, { prefix: "总耗时" }) : "",
+          genMs != null ? eventDurationLabel(genMs, { prefix: "生成" }) : "",
+        ].filter(Boolean).join(" · "),
+        durationMs: session.wallMs ?? genMs,
+        generationMs: genMs,
         raw: entry.raw,
         sensitive: true,
         evidence: evidenceFromEntry(entry, "trace:astr_agent_complete", "trace", "high"),
       });
-      if (trace.durationMs != null && trace.durationMs >= slowSessionMs) {
+      // 慢会话：按端到端墙钟判断（用户体感）
+      const slowBasis = session.wallMs ?? genMs;
+      if (slowBasis != null && slowBasis >= slowSessionMs) {
         pushSessionEvent(session, {
           id: eventKey(spanId, "slow", entry),
           timestamp: ts,
@@ -1956,8 +2023,8 @@ export function buildTraceInsights(entries) {
           type: "slow",
           title: "会话响应较慢",
           detail: compactText(session.messageOutline || "该会话耗时超过阈值", 180),
-          meta: eventDurationLabel(trace.durationMs),
-          durationMs: trace.durationMs,
+          meta: eventDurationLabel(slowBasis, { prefix: "总耗时" }),
+          durationMs: slowBasis,
           raw: entry.raw,
           sensitive: true,
           evidence: evidenceFromEntry(entry, "trace:slow_session", "trace", "high"),
@@ -1969,6 +2036,11 @@ export function buildTraceInsights(entries) {
     if (action === "astr_agent_error" || entry.level === "error") {
       session.status = "error";
       session.enteredAgentFlow = true;
+      session.lastTs = Math.max(session.lastTs || 0, ts || 0);
+      if (session.startTs && session.lastTs >= session.startTs) {
+        session.wallMs = Math.max(0, session.lastTs - session.startTs);
+        session.durationMs = session.wallMs ?? session.generationMs ?? null;
+      }
       pushSessionEvent(session, {
         id: eventKey(spanId, "error", entry),
         timestamp: ts,
@@ -1976,7 +2048,10 @@ export function buildTraceInsights(entries) {
         type: "error",
         title: "会话错误",
         detail: compactText(entry.summary || entry.raw, 240),
-        meta: session.senderName || "",
+        meta: session.wallMs != null
+          ? eventDurationLabel(session.wallMs, { prefix: "总耗时" })
+          : (session.senderName || ""),
+        durationMs: session.wallMs ?? null,
         raw: entry.raw,
         sensitive: true,
         sensitiveMeta: true,
@@ -1989,6 +2064,18 @@ export function buildTraceInsights(entries) {
   attachPlainReasoningToSessions();
   hydrateAndPersistReasoningSticky();
   markStaleSessions([...sessions.values()], now, runningTimeoutMs);
+
+  // 收口：stale 也补 wallMs；durationMs 统一为墙钟优先
+  [...sessions.values()].forEach((session) => {
+    if (session.startTs && session.lastTs && session.lastTs >= session.startTs) {
+      if (session.status === "complete" || session.status === "error" || session.status === "stale") {
+        session.wallMs = Math.max(0, session.lastTs - session.startTs);
+      }
+    }
+    if (session.status === "complete" || session.status === "error" || session.status === "stale") {
+      session.durationMs = session.wallMs ?? session.generationMs ?? session.durationMs ?? null;
+    }
+  });
 
   const tracedMessageKeys = new Set(
     events
@@ -2063,8 +2150,9 @@ export function buildTraceInsights(entries) {
   });
 
   const completedSessions = visibleSessions.filter((session) => session.status === "complete");
-  const durationSessions = completedSessions.filter((session) => Number.isFinite(Number(session.durationMs)));
-  const durations = durationSessions.map((session) => Number(session.durationMs));
+  // 延迟分桶按端到端墙钟（durationMs 已统一）
+  const durationSessions = completedSessions.filter((session) => Number.isFinite(Number(session.durationMs ?? session.wallMs)));
+  const durations = durationSessions.map((session) => Number(session.durationMs ?? session.wallMs));
   const tokenTotals = completedSessions.map((session) => tokenTotal(session.tokenUsage));
   const inputTokens = completedSessions.map((session) => tokenValue(session.tokenUsage, ["input", "input_text", "input_other", "input_cached", "prompt_tokens"]));
   const outputTokens = completedSessions.map((session) => tokenValue(session.tokenUsage, ["output", "output_text", "completion_tokens"]));

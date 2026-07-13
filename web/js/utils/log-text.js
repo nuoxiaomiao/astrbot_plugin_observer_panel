@@ -30,7 +30,13 @@ export function extractResultId(text) {
 
 export function extractResultTs(text) {
   const match = String(text || "").match(/['"]ts['"]:\s*([0-9.]+)/);
-  return match ? Number(match[1]) * 1000 : null;
+  if (!match) return null;
+  const n = Number(match[1]);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  // 与 parser.normalizeEpochMs 一致：>1e12 已是 ms，否则按秒
+  if (n > 1e12) return Math.round(n);
+  if (n > 1e9) return Math.round(n * 1000);
+  return Math.round(n * 1000);
 }
 
 export function extractQuotedField(text, name) {

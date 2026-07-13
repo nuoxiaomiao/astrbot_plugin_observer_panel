@@ -465,6 +465,10 @@ body.compact .log-entry {
   border-radius: 0;
   background: var(--terminal-green);
   box-shadow: 0 0 6px 1px rgba(74, 246, 38, 0.55);
+  /* 默认静态；仅 full 慢呼吸 */
+}
+
+body.anim-full .status-dot {
   animation: breathe 2s ease-in-out infinite;
 }
 
@@ -474,6 +478,11 @@ body.compact .log-entry {
 .sidebar-status[data-log-stream-status="reconnecting"] .status-dot {
   background: var(--warn, #f0b429);
   box-shadow: 0 0 6px 1px color-mix(in srgb, var(--warn, #f0b429) 45%, transparent);
+}
+
+body.anim-full .sidebar-status[data-log-stream-status="pending"] .status-dot,
+body.anim-full .sidebar-status[data-log-stream-status="connecting"] .status-dot,
+body.anim-full .sidebar-status[data-log-stream-status="reconnecting"] .status-dot {
   animation: breathe 1.2s ease-in-out infinite;
 }
 

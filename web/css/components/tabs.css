@@ -68,29 +68,33 @@
 .view {
   display: none;
   min-height: 0;
-  opacity: 0;
-  transform: translateY(8px);
 }
 
 .view.active {
   display: block;
   min-height: 0;
   overflow: auto;
-  animation: viewFadeIn 0.35s ease-out both;
+  animation: viewFadeIn var(--motion-view-duration, 0.18s) var(--ease-out) both;
 }
 
 .view.leaving {
-  animation: viewFadeOut 0.2s ease-in both;
+  /* 离开态仅作标记；真正隐藏由 active 切换完成，避免与 JS 双轨 */
+  animation: none;
 }
 
 @keyframes viewFadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 @keyframes viewFadeOut {
-  from { opacity: 1; transform: translateY(0); }
-  to   { opacity: 0; transform: translateY(-8px); }
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+body.anim-medium .view.active,
+body.anim-off .view.active {
+  animation: none;
 }
 
 #logs.view.active {
@@ -152,16 +156,16 @@
 .astrbot-subview {
   display: none;
   min-height: 0;
-  opacity: 0;
-  transform: translateY(8px);
-  transition: opacity var(--motion-view-duration) var(--ease-out),
-              transform var(--motion-view-duration) var(--ease-out);
 }
 
 .astrbot-subview.active {
   display: block;
-  opacity: 1;
-  transform: translateY(0);
+  animation: viewFadeIn var(--motion-view-duration, 0.18s) var(--ease-out) both;
+}
+
+body.anim-medium .astrbot-subview.active,
+body.anim-off .astrbot-subview.active {
+  animation: none;
 }
 
 .astrbot-subview > .panel {

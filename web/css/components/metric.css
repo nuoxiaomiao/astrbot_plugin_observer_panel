@@ -185,5 +185,37 @@ body.anim-off *::after {
   transition-duration: 0.01ms !important;
 }
 
+/* medium：关装饰循环与列表入场，保留反馈类 transition */
 body.anim-medium .panel:hover { transform: none; }
-body.anim-medium .event-item { animation: none; }
+body.anim-medium .event-item { animation: none !important; }
+body.anim-medium .log-entry { animation: none !important; }
+body.anim-medium .function-card.animate-in,
+body.anim-medium .resource-card.animate-in { animation: none !important; }
+body.anim-medium .session-card.is-new { animation: none !important; }
+body.anim-medium .status-dot { animation: none !important; }
+
+/* medium：关掉 live 会话全部 infinite，保留静态色条/边框 */
+body.anim-medium .session-card.is-live,
+body.anim-medium .session-card.is-live::before,
+body.anim-medium .session-card.is-live::after,
+body.anim-medium .session-card.is-selected-live,
+body.anim-medium .session-live-card,
+body.anim-medium .session-live-card::before,
+body.anim-medium .session-live-card::after,
+body.anim-medium .session-live-card .session-live-progress::before,
+body.anim-medium .session-live-badge::before,
+body.anim-medium .session-typing-dot,
+body.anim-medium .session-card-duration.is-live-timer,
+body.anim-medium .session-overview-card.is-live::after,
+body.anim-medium .session-flow-step.running .session-flow-dot,
+body.anim-medium .session-flow-step.running .session-flow-main::before {
+  animation: none !important;
+}
+
+/* full：live 仅保留顶部扫描 + 进度条；去掉色条脉冲与选中双环（若上层未克制） */
+body.anim-full .session-card.is-live:not(.is-new) {
+  animation: none;
+}
+body.anim-full .session-card.is-live::before {
+  animation: none;
+}

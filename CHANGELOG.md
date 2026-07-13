@@ -1,5 +1,25 @@
 # 更新日志
 
+## v0.4.5 - 动效降噪与耗时语义 (2026-07-12)
+
+### 动效
+- 默认档位改为 **精简**（medium）；按钮文案 `动效: 精简/全开/关闭`。
+- CRT 扫描线仅 `anim-full` 开启；medium 关闭 live infinite、列表 stagger、状态点呼吸。
+- `shouldAnimate(tier)`：`enter` / `feedback` / `loop` 分层；metric 脉冲 1.2s 防抖。
+- 视图切换改为 CSS 单管线淡入，去掉 JS opacity 双轨。
+- 骨架屏改纯平色条带；事件列表 stagger 最多 8 项。
+
+### 视觉
+- 字体改为系统栈；`--muted-dark` 对比微调。
+- 主区 `workspaceMeta` 显示流状态 + 最近刷新时间；主题切换同步 `color-scheme`。
+
+### 耗时语义
+- 会话区分 **总耗时（墙钟 wallMs）** 与 **生成（stats generationMs）**；`durationMs` 兼容字段优先墙钟。
+- `time_to_first_token ≤ 0` 视为无效，不再显示「首 Token 0.00 秒」。
+- 进行中会话「已运行」本地 1s tick 刷新，不依赖全量 re-render。
+
+---
+
 ## v0.4.4 - WebUI 评审修复 (2026-07-12)
 
 ### Critical

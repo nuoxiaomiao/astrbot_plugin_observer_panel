@@ -160,6 +160,41 @@ function firstReasoningText(...values) {
   return "";
 }
 
+/**
+ * 将 Unix 秒/毫秒时间戳规范为毫秒。
+ * - > 1e12：已是 ms
+ * - 1e9–1e12：秒（可含小数）
+ */
+export function normalizeEpochMs(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (n > 1e12) return Math.round(n);
+  if (n > 1e9) return Math.round(n * 1000);
+  return null;
+}
+
+/**
+ * stats.start_time / end_time 为 Unix 秒时差 → 生成段耗时 ms。
+ * 若两端已是 ms 级 epoch，差值直接用（不再 *1000）。
+ */
+export function durationMsFromStats(stats) {
+  const st = Number(stats?.start_time);
+  const et = Number(stats?.end_time);
+  if (!Number.isFinite(st) || !Number.isFinite(et) || et < st) return null;
+  // 两端像 epoch 秒（~1e9）→ 差为秒；两端像 ms（~1e12）→ 差为 ms
+  if (st > 1e12 || et > 1e12) return Math.max(0, et - st);
+  return Math.max(0, (et - st) * 1000);
+}
+
+/** time_to_first_token：≤0 / 缺失视为无效（trace 常写 0.0） */
+export function timeToFirstTokenMsFromStats(stats) {
+  const raw = Number(stats?.time_to_first_token);
+  if (!Number.isFinite(raw) || raw <= 0) return null;
+  // 常见单位：秒（0.1–60）；若已是 ms 级（>1000）则不再 *1000
+  if (raw > 1000) return Math.round(raw);
+  return Math.round(raw * 1000);
+}
+
 export function buildTraceInfo(data) {
   if (!data || typeof data !== "object") return null;
   const fields = safeObject(data.fields);
@@ -168,10 +203,12 @@ export function buildTraceInfo(data) {
   const tokenUsage = safeObject(stats.token_usage);
   const chatProvider = safeObject(fields.chat_provider);
   const resultText = fields.tool_result == null ? "" : String(fields.tool_result);
+  // generationMs：模型 stats 生成段；durationMs 兼容旧字段，同 generationMs
+  const generationMs = durationMsFromStats(stats);
   return {
     action: data.action || data.name || "",
     spanId: data.span_id || "",
-    time: Number(data.time || 0) ? Number(data.time) * 1000 : null,
+    time: normalizeEpochMs(data.time) ?? (Number(data.time || 0) ? Number(data.time) * 1000 : null),
     umo: data.umo || "",
     senderName: data.sender_name || "",
     messageOutline: data.message_outline || "",
@@ -180,7 +217,7 @@ export function buildTraceInfo(data) {
     toolCallId: tool.id || extractResultId(resultText),
     toolName: tool.name || "",
     toolArgs: tool.args || null,
-    toolStartTs: Number(tool.ts || 0) ? Number(tool.ts) * 1000 : null,
+    toolStartTs: normalizeEpochMs(tool.ts) ?? (Number(tool.ts || 0) ? Number(tool.ts) * 1000 : null),
     toolResultTs: extractResultTs(resultText),
     toolResult: resultText,
     response: fields.resp || "",
@@ -192,12 +229,9 @@ export function buildTraceInfo(data) {
       fields.reasoningContent,
       fields.reasonContent,
     ),
-    durationMs: Number(stats.start_time || 0) && Number(stats.end_time || 0)
-      ? Math.max(0, (Number(stats.end_time) - Number(stats.start_time)) * 1000)
-      : null,
-    timeToFirstTokenMs: Number.isFinite(Number(stats.time_to_first_token))
-      ? Math.max(0, Number(stats.time_to_first_token) * 1000)
-      : null,
+    generationMs,
+    durationMs: generationMs,
+    timeToFirstTokenMs: timeToFirstTokenMsFromStats(stats),
     tokenUsage,
     providerId: chatProvider.id || "",
     model: chatProvider.model || "",

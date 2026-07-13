@@ -42,24 +42,24 @@
 .skeleton-line {
   height: 12px;
   width: 100%;
-  background: linear-gradient(
-    90deg,
-    var(--surface-2) 0%,
-    var(--surface-3) 45%,
-    var(--surface-2) 90%
-  );
-  background-size: 200% 100%;
-  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+  /* 纯平色条带，对齐 token「禁渐变」 */
+  background: var(--surface-3);
   border: 1px solid var(--line);
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
 }
 
 .skeleton-line.short {
   width: 42%;
 }
 
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
 @keyframes skeleton-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 
 .loading {

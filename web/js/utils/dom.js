@@ -12,6 +12,7 @@ import {
   DEFAULT_RAW_CLIP_LENGTH,
 } from "../config.js?v=20260709-stream4";
 import { formatCompactLogTime, clampNumber, boolValue } from "./format.js?v=20260709-stream4";
+import { shouldAnimate } from "./motion.js?v=20260709-stream4";
 
 export function $(id) {
   return document.getElementById(id);
@@ -40,24 +41,33 @@ export function setTextAnimated(id, rawValue, duration = 400) {
 
   // 非数字 → 直接设
   const numMatch = strVal.match(/^(-?\d+(?:\.\d+)?)/);
-  if (!numMatch) { el.textContent = strVal; return; }
+  if (!numMatch) {
+    el.textContent = strVal;
+    return;
+  }
 
   const current = parseFloat(el.textContent) || 0;
   const target = parseFloat(numMatch[1]);
-  if (Math.abs(target - current) < 0.3) { el.textContent = strVal; triggerPulse(el); return; }
+  const prevText = el.textContent;
 
-  const suffix = strVal.slice(numMatch[1].length); // 保留 "%" 等单位
+  // 关闭反馈动效 / 变化极小：直接赋值；仅在文本真正变化时脉冲
+  if (!shouldAnimate("feedback") || Math.abs(target - current) < 0.3) {
+    el.textContent = strVal;
+    if (shouldAnimate("feedback") && prevText !== strVal) triggerPulse(el);
+    return;
+  }
+
+  const suffix = strVal.slice(numMatch[1].length);
   const startTime = performance.now();
 
   const tick = (now) => {
     const t = Math.min((now - startTime) / duration, 1);
-    const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+    const eased = 1 - Math.pow(1 - t, 3);
     const val = current + (target - current) * eased;
     el.textContent = val.toFixed(1) + suffix;
     if (t < 1) {
       requestAnimationFrame(tick);
     } else {
-      // ★ 动画完成 → 精确值 + 脉冲高亮
       el.textContent = strVal;
       triggerPulse(el);
     }
@@ -65,7 +75,15 @@ export function setTextAnimated(id, rawValue, duration = 400) {
   requestAnimationFrame(tick);
 }
 
+const pulseCooldown = new WeakMap();
+
 function triggerPulse(el) {
+  if (!el || !shouldAnimate("feedback")) return;
+  const now = Date.now();
+  const last = pulseCooldown.get(el) || 0;
+  // 防抖：同一元素 1.2s 内不重复闪，避免 5s 轮询 thrash
+  if (now - last < 1200) return;
+  pulseCooldown.set(el, now);
   el.classList.remove("updated");
   void el.offsetWidth;
   el.classList.add("updated");
@@ -509,9 +527,8 @@ export function renderWorkspaceChrome() {
     logs: ["日志分析", "重要信息、证据和原始日志"],
     system: ["系统", "主机、进程、磁盘与网络"],
   };
-  const [title, meta] = titles[state.activeTab] || titles.overview;
+  const [title, baseMeta] = titles[state.activeTab] || titles.overview;
   setText("workspaceTitle", title);
-  setText("workspaceMeta", meta);
 
   // 有 logStream 状态时优先流/文件模式文案，不无条件盖回「在线 · 时间」
   const streamStatus = state.logStream?.status || "idle";
@@ -531,37 +548,56 @@ export function renderWorkspaceChrome() {
     "stopped",
   ].includes(streamStatus);
 
+  let streamShort = "";
   if (preferStreamLabel) {
     const broker = state.config?.log_broker_enabled ? " · LogBroker" : "";
     let label;
     switch (streamStatus) {
       case "pending":
         label = state.logStream?.detail || "文件读取 · 稍后接入实时流";
+        streamShort = "流: 待接入";
         break;
       case "connecting":
         label = "日志流连接中…";
+        streamShort = "流: 连接中";
         break;
       case "reconnecting":
         label = state.logStream?.detail || "日志流重连中…";
+        streamShort = "流: 重连中";
         break;
       case "connected":
       case "streaming":
         label = `实时日志流${broker}`;
+        streamShort = "流: 实时";
         break;
       case "degraded":
         label = "文件轮询（流已降级）";
+        streamShort = "流: 轮询";
         break;
       case "disabled":
         label = "文件轮询（流已关闭）";
+        streamShort = "流: 关闭";
         break;
       case "stopped":
         label = "文件轮询模式";
+        streamShort = "流: 文件";
         break;
       default:
         label = "文件轮询模式";
+        streamShort = "流: 文件";
     }
     setText("sidebarStatusText", label);
   } else {
     setText("sidebarStatusText", `AstrBot 在线 · ${formatCompactLogTime({ timestamp: Date.now() })}`);
+    streamShort = "流: 空闲";
   }
+
+  // 主区 meta：基础说明 + 流状态 + 最近刷新时间
+  const refreshAt = state.lastRefreshTime
+    ? formatCompactLogTime({ timestamp: state.lastRefreshTime })
+    : "--";
+  const metaParts = [baseMeta];
+  if (streamShort) metaParts.push(streamShort);
+  metaParts.push(`刷新 ${refreshAt}`);
+  setText("workspaceMeta", metaParts.join(" · "));
 }

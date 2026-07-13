@@ -23,7 +23,7 @@
   --text: #eaeaea;
   --text-bright: #ffffff;
   --muted: #8a8a8a;
-  --muted-dark: #6a6a6a;
+  --muted-dark: #7a7a7a;
 
   /* —— 强调：航空危险红（唯一装饰强调色）—— */
   --accent: #e61919;
@@ -85,9 +85,9 @@
   --ease-bounce: cubic-bezier(0.4, 0, 0.2, 1); /* 遥测=去弹跳，改线性收敛 */
   --transition: border-color 0.14s ease, background-color 0.14s ease, color 0.14s ease;
 
-  /* 字体：等宽主导数据/元信息；sans 用于结构性标题 */
-  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  --sans: "Archivo", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  /* 字体：系统栈，避免声明未加载的品牌字体 */
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "PingFang SC", "Microsoft YaHei", Helvetica, Arial, sans-serif;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -101,9 +101,9 @@
   --space-12: 48px;
 
   /* WebUI 动效时序 */
-  --motion-enter-duration: 0.3s;
-  --motion-stagger-step: 0.05s;
-  --motion-view-duration: 0.2s;
+  --motion-enter-duration: 0.28s;
+  --motion-stagger-step: 0.04s;
+  --motion-view-duration: 0.18s;
   --motion-live-slow: 2.4s;
   --motion-live-fast: 1.35s;
 

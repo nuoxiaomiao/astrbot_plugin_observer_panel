@@ -176,9 +176,19 @@ export function setTheme(theme) {
   if (theme === "light") {
     root.setAttribute("data-theme", "light");
     document.body.classList.add("theme-light");
+    root.style.colorScheme = "light";
+    const meta = document.querySelector('meta[name="color-scheme"]');
+    if (meta) meta.setAttribute("content", "light");
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.setAttribute("content", "#eae8e3");
   } else {
     root.removeAttribute("data-theme");
     document.body.classList.remove("theme-light");
+    root.style.colorScheme = "dark";
+    const meta = document.querySelector('meta[name="color-scheme"]');
+    if (meta) meta.setAttribute("content", "dark");
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.setAttribute("content", "#0a0a0a");
   }
   const btn = $("themeToggle");
   if (btn) {

@@ -134,6 +134,119 @@ function formatDurationMs(value) {
   return `${(number / 1000).toFixed(number >= 10000 ? 1 : 2)} 秒`;
 }
 
+/** 端到端墙钟（总耗时）：wallMs 优先，兼容 durationMs */
+function sessionWallMs(session) {
+  if (!session) return null;
+  if (session.wallMs != null && Number.isFinite(Number(session.wallMs))) {
+    return Math.max(0, Number(session.wallMs));
+  }
+  if (session.durationMs != null && Number.isFinite(Number(session.durationMs))) {
+    return Math.max(0, Number(session.durationMs));
+  }
+  return null;
+}
+
+/** 模型生成段（stats） */
+function sessionGenMs(session) {
+  if (!session) return null;
+  if (session.generationMs != null && Number.isFinite(Number(session.generationMs)) && Number(session.generationMs) >= 0) {
+    return Number(session.generationMs);
+  }
+  return null;
+}
+
+/** 有效首 Token：仅 >0 展示（trace 常写 0.0） */
+function sessionTtftMs(session) {
+  const n = Number(session?.timeToFirstTokenMs);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * 会话耗时文案
+ * - live：已运行（墙钟进行中）
+ * - 完成：总耗时=墙钟；有生成段时附带「生成」
+ * @param {"card"|"meta"|"value"} mode
+ */
+function sessionDurationText(session, mode = "card") {
+  if (!session) return mode === "value" ? "--" : "";
+  if (sessionIsLive(session)) {
+    const liveText = formatSessionLiveDuration(session);
+    if (mode === "value") return `${liveText}+`;
+    return `已运行 ${liveText}`;
+  }
+  const wall = sessionWallMs(session);
+  const gen = sessionGenMs(session);
+  if (wall == null && gen == null) {
+    if (mode === "card") return "耗时未记录";
+    if (mode === "value") return "--";
+    return "";
+  }
+  if (mode === "value") {
+    if (wall != null && gen != null) return `${formatDurationMs(wall)}（生成 ${formatDurationMs(gen)}）`;
+    if (wall != null) return formatDurationMs(wall);
+    return `生成 ${formatDurationMs(gen)}`;
+  }
+  const parts = [];
+  if (wall != null) parts.push(`总耗时 ${formatDurationMs(wall)}`);
+  if (gen != null) parts.push(`生成 ${formatDurationMs(gen)}`);
+  return parts.join(" · ");
+}
+
+let sessionLiveTickTimer = null;
+
+function stopSessionLiveTick() {
+  if (sessionLiveTickTimer != null) {
+    window.clearInterval(sessionLiveTickTimer);
+    sessionLiveTickTimer = null;
+  }
+}
+
+function findSessionBySpanId(spanId) {
+  const sessions = state.traceInsights?.sessions || [];
+  return sessions.find((session) => sessionMatchesSpan(session, spanId)) || null;
+}
+
+/** 仅 patch live 计时文案，不触发 analytics / 全量 re-render */
+function patchLiveDurationNodes(now = Date.now()) {
+  document.querySelectorAll(".session-card.is-live[data-span-id]").forEach((card) => {
+    const session = findSessionBySpanId(card.dataset.spanId);
+    if (!session || !sessionIsLive(session)) return;
+    const duration = card.querySelector(".session-card-duration");
+    if (!duration) return;
+    const next = `已运行 ${formatSessionLiveDuration(session, now)}`;
+    if (duration.textContent !== next) duration.textContent = next;
+    duration.classList.add("is-live-timer");
+  });
+
+  const detailHost = $("sessionDetail");
+  if (!detailHost || !detailHost.classList.contains("session-detail-live")) return;
+  const spanId = detailHost.dataset.currentSpanId || state.selectedSessionId || "";
+  const session = findSessionBySpanId(spanId);
+  if (!session || !sessionIsLive(session)) return;
+  const chipVal = detailHost.querySelector('.session-overview-chip[data-role="duration"] strong');
+  if (chipVal) {
+    const next = `${formatSessionLiveDuration(session, now)}+`;
+    if (chipVal.textContent !== next) chipVal.textContent = next;
+  }
+}
+
+function ensureSessionLiveTick() {
+  const hasLive = (state.traceInsights?.sessions || []).some((session) => sessionIsLive(session));
+  if (!hasLive) {
+    stopSessionLiveTick();
+    return;
+  }
+  if (sessionLiveTickTimer != null) return;
+  sessionLiveTickTimer = window.setInterval(() => {
+    const stillLive = (state.traceInsights?.sessions || []).some((session) => sessionIsLive(session));
+    if (!stillLive) {
+      stopSessionLiveTick();
+      return;
+    }
+    patchLiveDurationNodes();
+  }, 1000);
+}
+
 function sessionResponsePlaceholder(session) {
   if (!session) return "--";
   if (session.displayStatus === "complete" || session.displayStatus === "empty") {
@@ -242,9 +355,7 @@ function updateSessionCard(item, session) {
     );
   }
   if (duration) {
-    duration.textContent = session.durationMs != null
-      ? `总耗时 ${formatDurationMs(session.durationMs)}`
-      : (live ? `已运行 ${formatSessionLiveDuration(session)}` : "耗时未记录");
+    duration.textContent = sessionDurationText(session, "card");
     duration.classList.toggle("is-live-timer", live);
   }
   const footer = item.querySelector(".session-card-footer");
@@ -329,7 +440,7 @@ function sessionDetailSignature(session) {
     toolsSig,
     // 完成态再纳入耗时/token，避免 live 抖动
     session.status === "complete" || session.status === "error"
-      ? `${session.durationMs || ""}:${session.timeToFirstTokenMs || ""}:${JSON.stringify(session.tokenUsage || {})}`
+      ? `${session.wallMs || session.durationMs || ""}:${session.generationMs || ""}:${session.timeToFirstTokenMs || ""}:${JSON.stringify(session.tokenUsage || {})}`
       : "live",
   ];
 }
@@ -883,7 +994,11 @@ function buildSessionJourney(session, insights) {
     const requestStartTs = modelStartEvent?.timestamp
       || Math.max(...tools.map((t) => t.endTs || t.startTs || 0), sessionStartTs);
     const requestRunning = live && session.status !== "complete" && session.status !== "error";
-    const requestEndTs = session.status === "complete" ? (messageOutEvent?.timestamp || (session.durationMs ? requestStartTs + (session.durationMs || 0) : lastTs)) : lastTs;
+    // 完成态终点：message_out 优先；否则用墙钟（wallMs/durationMs）推算
+    const wallForEnd = sessionWallMs(session);
+    const requestEndTs = session.status === "complete"
+      ? (messageOutEvent?.timestamp || (wallForEnd != null ? requestStartTs + wallForEnd : lastTs))
+      : lastTs;
     steps.push({
       key: "request-start",
       title: "开始请求模型",
@@ -942,8 +1057,9 @@ function buildSessionJourney(session, insights) {
       body: [session.providerId, session.model].filter(Boolean).join(" / ") || "模型已返回结果",
       timeLabel: completeTs ? formatTime(completeTs) : "--",
       meta: joinMeta([
-        session.durationMs != null ? `总耗时 ${formatDurationMs(session.durationMs)}` : stepDuration(startTs, completeTs) != null ? `用时 ${formatDurationMs(stepDuration(startTs, completeTs))}` : "",
-        session.timeToFirstTokenMs != null ? `首 Token ${formatDurationMs(session.timeToFirstTokenMs)}` : "",
+        sessionDurationText(session, "meta")
+          || (stepDuration(startTs, completeTs) != null ? `用时 ${formatDurationMs(stepDuration(startTs, completeTs))}` : ""),
+        sessionTtftMs(session) != null ? `首 Token ${formatDurationMs(sessionTtftMs(session))}` : "",
         outputTokens ? `输出 ${formatNumber(outputTokens)} Token` : "",
       ]),
       badgeLabel: "成功",
@@ -963,7 +1079,8 @@ function buildSessionJourney(session, insights) {
       body: privacyText(detail, "隐私模式已隐藏错误详情"),
       timeLabel: errTs ? formatTime(errTs) : "--",
       meta: joinMeta([
-        session.durationMs != null ? `总耗时 ${formatDurationMs(session.durationMs)}` : stepDuration(startTs, errTs) != null ? `用时 ${formatDurationMs(stepDuration(startTs, errTs))}` : "",
+        sessionDurationText(session, "meta")
+          || (stepDuration(startTs, errTs) != null ? `用时 ${formatDurationMs(stepDuration(startTs, errTs))}` : ""),
         code ? `错误码 ${code}` : "",
       ]),
       badgeLabel: "失败",
@@ -1021,7 +1138,7 @@ function buildSessionJourney(session, insights) {
         session.response ? "隐私模式已隐藏回复内容" : sessionResponsePlaceholder(session),
       ),
       timeLabel: lastTs ? formatTime(lastTs) : "--",
-      meta: session.durationMs != null ? `总耗时 ${formatDurationMs(session.durationMs)}` : "",
+      meta: sessionDurationText(session, "meta"),
       badgeLabel: session.displayStatus === "empty" ? "已完成" : "已回复",
       badgeKind: "ok",
       state: "done",
@@ -1104,7 +1221,7 @@ function setLiveText(el, newText, liveClass, animate) {
   }
 
   el.dataset.liveText = newText;
-  const useMotion = Boolean(animate) && shouldAnimate();
+  const useMotion = Boolean(animate) && shouldAnimate("enter");
 
   if (!useMotion) {
     el.classList.remove("is-switching");
@@ -1236,13 +1353,15 @@ function buildSessionOverview(session) {
   meta.className = "session-overview-meta";
   const live = sessionIsLive(session);
   [
-    ["模型", [session.providerId, session.model].filter(Boolean).join(" / ") || "--"],
-    ["规则", session.personaId || "--"],
-    ["工具", formatNumber((session.tools || []).length)],
-    ["总耗时", session.durationMs != null ? formatDurationMs(session.durationMs) : (live ? `${formatSessionLiveDuration(session)}+` : "--")],
-  ].forEach(([label, value]) => {
+    ["模型", [session.providerId, session.model].filter(Boolean).join(" / ") || "--", "model"],
+    ["规则", session.personaId || "--", "persona"],
+    ["工具", formatNumber((session.tools || []).length), "tools"],
+    ["总耗时", sessionDurationText(session, "value"), "duration"],
+  ].forEach(([label, value, role]) => {
     const chip = document.createElement("div");
     chip.className = "session-overview-chip";
+    if (role) chip.dataset.role = role;
+    if (role === "duration" && live) chip.classList.add("is-live-timer");
     const key = document.createElement("span");
     key.textContent = label;
     const val = document.createElement("strong");
@@ -1287,12 +1406,14 @@ function patchSessionOverview(section, session) {
       else statusHost.appendChild(newStatus);
     }
   }
+  const durationChip = section.querySelector('.session-overview-chip[data-role="duration"]');
+  if (durationChip) durationChip.classList.toggle("is-live-timer", live);
   const chips = section.querySelectorAll(".session-overview-chip strong");
   const values = [
     [session.providerId, session.model].filter(Boolean).join(" / ") || "--",
     session.personaId || "--",
     formatNumber((session.tools || []).length),
-    session.durationMs != null ? formatDurationMs(session.durationMs) : (live ? `${formatSessionLiveDuration(session)}+` : "--"),
+    sessionDurationText(session, "value"),
   ];
   chips.forEach((el, idx) => {
     if (values[idx] != null && el.textContent !== values[idx]) el.textContent = values[idx];
@@ -1429,7 +1550,7 @@ function renderSessionDetail(session, insights) {
       patchSessionFlow(flow, buildSessionJourney(session, insights), true);
       flowWrap.append(flowTitle, flow);
 
-      const swapDelay = shouldAnimate() ? 280 : 0;
+      const swapDelay = shouldAnimate("enter") ? 280 : 0;
       // 在 live 卡片淡出后替换为 flow 并触发淡入
       window.setTimeout(() => {
         // 检查 liveWrap 仍在 DOM 中（未被其他渲染清除）
@@ -1513,6 +1634,7 @@ function renderSessionVisuals(insights) {
   const selected = renderSessionList(insights);
   renderSessionDetail(selected, insights);
   renderRuntimeStats(insights);
+  ensureSessionLiveTick();
 }
 
 export function renderAstrBotVisuals(insights, entries) {

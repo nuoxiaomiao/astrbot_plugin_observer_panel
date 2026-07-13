@@ -14,7 +14,7 @@ import { renderLogs } from "./views/logs.js?v=20260709-stream4";
 import { bindUI, closeDetailPanel, selectTimeFilter as uiSelectTimeFilter, toggleEditMode, addLoadingState, removeLoadingState } from "./ui.js?v=20260709-stream4";
 import { initEventListActions } from "./components/event-list.js?v=20260709-stream4";
 import { initLogListActions, syncLogLevelButtons } from "./components/log-list.js?v=20260709-stream4";
-import { transitionViews } from "./utils/motion.js?v=20260709-stream4";
+import { transitionViews, shouldAnimate } from "./utils/motion.js?v=20260709-stream4";
 import {
   bindAuthHooks,
   bindAuthUi,
@@ -425,12 +425,7 @@ function selectTab(name, options = {}) {
   const oldView = document.querySelector(".view.active");
   const newView = document.getElementById(name);
 
-  // ★ 离开动画
-  if (oldView && oldView.id !== name) {
-    oldView.classList.add("leaving");
-    window.setTimeout(() => oldView.classList.remove("leaving"), 200);
-  }
-
+  // 视图切换：CSS 单管线淡入（transitionViews 内处理 leaving 标记）
   transitionViews(oldView, newView, {
     activate: () => applyMainViewState(name),
   });
@@ -641,63 +636,96 @@ bootstrapAuth().then((result) => {
 });
 
 // ============================================================================
-// 动画级别切换（P3）
+// 动画级别：full / medium(默认) / off
 // ============================================================================
-const ANIM_LEVELS = ['full', 'medium', 'off'];
+const ANIM_LEVELS = ["medium", "full", "off"];
 let animLevel = 0;
+
+function animLevelLabel(level) {
+  return { full: "动效: 全开", medium: "动效: 精简", off: "动效: 关闭" }[level] || "动效: 精简";
+}
+
+function applyAnimLevelClass() {
+  const level = ANIM_LEVELS[animLevel];
+  document.body.classList.remove("anim-full", "anim-medium", "anim-off");
+  document.body.classList.add(`anim-${level}`);
+  const btn = $("animToggle");
+  if (btn) {
+    btn.textContent = animLevelLabel(level);
+    btn.title = "切换动画强度（精简 / 全开 / 关闭）";
+    btn.setAttribute("aria-pressed", level !== "off" ? "true" : "false");
+  }
+}
 
 function toggleAnimLevel() {
   animLevel = (animLevel + 1) % ANIM_LEVELS.length;
   const level = ANIM_LEVELS[animLevel];
-  document.body.classList.remove('anim-full', 'anim-medium', 'anim-off');
-  document.body.classList.add(`anim-${level}`);
-
-  const btn = $('animToggle');
-  const labels = { full: '[ MOT·3 ]', medium: '[ MOT·1 ]', off: '[ MOT·0 ]' };
-  btn.textContent = labels[level];
-  btn.setAttribute('aria-pressed', animLevel > 0);
-  try { localStorage.setItem('observer_anim_level', level); } catch {}
+  applyAnimLevelClass();
+  try {
+    localStorage.setItem("observer_anim_level", level);
+  } catch {}
 }
 
 function initAnimLevel() {
   try {
-    const saved = localStorage.getItem('observer_anim_level');
+    const saved = localStorage.getItem("observer_anim_level");
     if (saved) {
       const idx = ANIM_LEVELS.indexOf(saved);
       if (idx >= 0) animLevel = idx;
+    } else {
+      // 默认精简：运维盯盘少噪声
+      animLevel = ANIM_LEVELS.indexOf("medium");
     }
-  } catch {}
-  document.body.classList.add(`anim-${ANIM_LEVELS[animLevel]}`);
+  } catch {
+    animLevel = ANIM_LEVELS.indexOf("medium");
+  }
+  applyAnimLevelClass();
 }
 
 initAnimLevel();
 
-// Bind anim toggle
-const animBtn = $('animToggle');
-if (animBtn) animBtn.addEventListener('click', toggleAnimLevel);
+const animBtn = $("animToggle");
+if (animBtn) animBtn.addEventListener("click", toggleAnimLevel);
 
 // ============================================================================
-// 全局触摸缩放反馈（P3）
+// 全局触摸缩放反馈（仅 full）
 // ============================================================================
-document.addEventListener('pointerdown', (e) => {
-  const target = e.target.closest(
-    '.metric[data-jump], .event-item.selectable, .tab, ' +
-    '.subtab, .action-btn, .event-filter, .level-filter, .time-filter'
-  );
-  if (!target || target.closest('button')) return;
-  target.style.transition = 'transform 0.1s ease-out';
-  target.style.transform = 'scale(0.97)';
-}, { passive: true });
+document.addEventListener(
+  "pointerdown",
+  (e) => {
+    if (!shouldAnimate("loop")) return;
+    const target = e.target.closest(
+      ".metric[data-jump], .event-item.selectable, .tab, " +
+        ".subtab, .action-btn, .event-filter, .level-filter, .time-filter",
+    );
+    if (!target || target.closest("button")) return;
+    target.style.transition = "transform 0.1s ease-out";
+    target.style.transform = "scale(0.97)";
+  },
+  { passive: true },
+);
 
-document.addEventListener('pointerup', () => {
-  document.querySelectorAll(
-    '.metric[data-jump], .event-item.selectable, .tab, ' +
-    '.subtab, .action-btn, .event-filter, .level-filter, .time-filter'
-  ).forEach(el => { el.style.transform = ''; });
-}, { passive: true });
+document.addEventListener(
+  "pointerup",
+  () => {
+    document
+      .querySelectorAll(
+        ".metric[data-jump], .event-item.selectable, .tab, " +
+          ".subtab, .action-btn, .event-filter, .level-filter, .time-filter",
+      )
+      .forEach((el) => {
+        el.style.transform = "";
+      });
+  },
+  { passive: true },
+);
 
-document.addEventListener('pointerleave', () => {
-  document.querySelectorAll('[style*="scale(0.97)"]').forEach(el => {
-    el.style.transform = '';
-  });
-}, { passive: true });
+document.addEventListener(
+  "pointerleave",
+  () => {
+    document.querySelectorAll('[style*="scale(0.97)"]').forEach((el) => {
+      el.style.transform = "";
+    });
+  },
+  { passive: true },
+);

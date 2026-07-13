@@ -223,7 +223,7 @@ function renderResourceGauges(gauges) {
     }
 
     item.className = `resource-card ${g.kind || "ok"}${isNew ? " animate-in" : ""}`;
-    if (isNew && shouldAnimate()) {
+    if (isNew && shouldAnimate("enter")) {
       item.style.animationDelay = `${index * 0.06}s`;
     } else {
       item.style.animationDelay = "";
@@ -255,7 +255,7 @@ function playOverviewEnter() {
   const root = $("overview");
   if (!root || root.dataset.entered === "1") return;
   root.dataset.entered = "1";
-  if (!shouldAnimate()) {
+  if (!shouldAnimate("enter")) {
     root.classList.add("overview-entered");
     return;
   }
@@ -295,7 +295,7 @@ function renderBigScreenCards(cardItems, { force = false, empty = false } = {}) 
   cards.innerHTML = "";
   cards.classList.toggle("is-empty", Boolean(empty));
   const fragment = document.createDocumentFragment();
-  const animate = shouldAnimate();
+  const animate = shouldAnimate("enter");
   cardItems.forEach(([title, value, meta, kind], index) => {
     const item = document.createElement("article");
     item.className = `function-card ${kind || ""}${animate ? " animate-in" : ""}`;

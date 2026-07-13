@@ -36,8 +36,10 @@
 .event-item:nth-child(6)  { animation-delay: 125ms; }
 .event-item:nth-child(7)  { animation-delay: 150ms; }
 .event-item:nth-child(8)  { animation-delay: 175ms; }
-.event-item:nth-child(9)  { animation-delay: 200ms; }
-.event-item:nth-child(10) { animation-delay: 225ms; }
+/* 第 9 项起不再 stagger，避免长列表噪声 */
+.event-item:nth-child(n+9) {
+  animation: none;
+}
 
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(8px); }

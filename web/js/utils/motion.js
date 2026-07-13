@@ -2,52 +2,59 @@
 // 视图与数值动效辅助
 // ============================================================================
 
-export const VIEW_TRANSITION_MS = 200;
+export const VIEW_TRANSITION_MS = 180;
 
-/** anim-off / prefers-reduced-motion 时跳过 JS 延迟动效 */
-export function shouldAnimate() {
-  if (typeof document !== "undefined" && document.body?.classList.contains("anim-off")) return false;
+/**
+ * 动效档位：
+ * - enter: 入场 stagger / 视图淡入 → 仅 full
+ * - feedback: 数值脉冲、条宽、highlight → full + medium
+ * - loop: 无限循环装饰 → 仅 full
+ * - any: 非 off 即可
+ */
+export function getAnimLevel() {
+  if (typeof document === "undefined") return "full";
+  const body = document.body;
+  if (!body) return "full";
+  if (body.classList.contains("anim-off")) return "off";
+  if (body.classList.contains("anim-medium")) return "medium";
+  return "full";
+}
+
+/** @param {"enter"|"feedback"|"loop"|"any"} [tier="any"] */
+export function shouldAnimate(tier = "any") {
   if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
     return false;
   }
-  return true;
+  const level = getAnimLevel();
+  if (level === "off") return false;
+  if (tier === "any" || tier === "feedback") return level === "full" || level === "medium";
+  if (tier === "enter" || tier === "loop") return level === "full";
+  return level === "full" || level === "medium";
 }
 
 /**
- * 在两个面板容器之间做淡出/淡入切换。
+ * 视图切换：仅切换 active/hidden（由 CSS .view.active 负责淡入）。
+ * 不再用 JS 改 opacity，避免与 CSS 双轨叠化。
  * @param {HTMLElement|null} oldView
  * @param {HTMLElement|null} newView
  * @param {{ durationMs?: number, activate?: () => void }} options
  */
 export function transitionViews(oldView, newView, options = {}) {
   const activate = options.activate || (() => {});
-  const durationMs = shouldAnimate() ? (options.durationMs ?? VIEW_TRANSITION_MS) : 0;
 
-  if (!newView) {
-    activate();
-    return;
+  if (oldView && oldView !== newView && shouldAnimate("enter")) {
+    oldView.classList.add("leaving");
+    window.setTimeout(() => oldView.classList.remove("leaving"), VIEW_TRANSITION_MS);
   }
 
-  if (!oldView || oldView === newView || durationMs <= 0) {
-    activate();
-    if (newView) newView.style.opacity = "";
-    if (oldView && oldView !== newView) oldView.style.opacity = "";
-    return;
-  }
+  activate();
 
-  oldView.style.opacity = "0";
-  window.setTimeout(() => {
-    activate();
-    newView.style.opacity = "0";
-    void newView.offsetWidth;
-    requestAnimationFrame(() => {
-      newView.style.opacity = "1";
-      window.setTimeout(() => {
-        oldView.style.opacity = "";
-        newView.style.opacity = "";
-      }, durationMs);
-    });
-  }, durationMs);
+  if (oldView && oldView !== newView) {
+    oldView.style.opacity = "";
+  }
+  if (newView) {
+    newView.style.opacity = "";
+  }
 }
 
 /**
@@ -56,7 +63,7 @@ export function transitionViews(oldView, newView, options = {}) {
 export function animateFillWidth(fill, percent, { fromZero = false } = {}) {
   if (!fill) return;
   const target = `${Math.max(0, Math.min(100, Number(percent || 0)))}%`;
-  if (!shouldAnimate()) {
+  if (!shouldAnimate("feedback")) {
     fill.style.width = target;
     fill.classList.remove("is-pulse");
     return;
