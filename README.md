@@ -80,7 +80,7 @@ http://127.0.0.1:7199/
 {
   "ok": true,
   "plugin": "astrbot_plugin_observer_panel",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "uptime_seconds": 123.456,
   "log_mode": "stream",
   "log_stream_available": true,

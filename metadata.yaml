@@ -2,7 +2,7 @@ name: astrbot_plugin_observer_panel
 display_name: AstrBot 观察面板
 desc: 在独立端口提供 WebUI，用于查看系统资源、AstrBot 状态、插件可视化和日志诊断
 author: nuoxiaomiao
-version: 0.4.5
+version: 0.4.6
 repo: "https://github.com/nuoxiaomiao/astrbot_plugin_observer_panel"
 astrbot_version: ">=4.16"
 support_platforms: [aiocqhttp]

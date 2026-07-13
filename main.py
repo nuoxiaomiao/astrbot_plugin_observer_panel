@@ -49,7 +49,7 @@ except Exception:
 
 
 PLUGIN_NAME = "astrbot_plugin_observer_panel"
-PLUGIN_VERSION = "0.4.5"
+PLUGIN_VERSION = "0.4.6"
 
 DEFAULT_ASTRBOT_LOG_FILES = ["astrbot.log", "astrbot.trace.log"]
 DEFAULT_THRESHOLDS = {

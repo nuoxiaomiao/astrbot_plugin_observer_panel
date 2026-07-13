@@ -1,5 +1,16 @@
 # 更新日志
 
+## v0.4.6 - 会话入站身份统一 (2026-07-13)
+
+### 会话
+- **主路径**：`ensureSession` 用 `conversationKey`（umo|sender|规范化正文）+ 未完成索引，不同 `span_id` 从第一条 trace 起挂到同一 session。
+- 规范化 `[At:…]` 前后位置，修复「摸摸头」等双「进行中」卡片。
+- 挂载 alias 不重复合成 `message_in`；同规则 `sel_persona` 不重复记事件。
+- 完成/错误/stale 从 openIndex 摘除，同文案下一句不粘旧会话。
+- `mergeSplitSessions` 仅作乱序安全网，验收不依赖事后合并。
+
+---
+
 ## v0.4.5 - 动效降噪与耗时语义 (2026-07-12)
 
 ### 动效

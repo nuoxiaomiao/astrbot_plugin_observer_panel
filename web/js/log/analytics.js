@@ -511,15 +511,58 @@ export function sessionDisplayDurationMs(session, now = Date.now()) {
   return session.wallMs ?? session.durationMs ?? sessionGenerationMs(session);
 }
 
+/** 平台 @ 提及：`[At:123]`（位置可能在正文前/后） */
+const AT_MENTION_RE = /\[\s*At\s*:\s*\d+\s*\]/gi;
+
+/**
+ * 合并/身份匹配用正文规范化（不改 UI 展示原文）。
+ * `[At:1] 摸摸头` 与 `摸摸头 [At:1]` → 同一 body + 同一 mentions。
+ */
+export function normalizeMessageOutlineForMatch(text) {
+  const raw = String(text || "");
+  const mentions = [];
+  const without = raw.replace(AT_MENTION_RE, (match) => {
+    const normalized = String(match || "").replace(/\s+/g, "").toLowerCase();
+    if (normalized) mentions.push(normalized);
+    return " ";
+  });
+  const body = compactText(without, 160).toLowerCase();
+  if (!body && !mentions.length) return "";
+  const mentionKey = [...new Set(mentions)].sort().join(",");
+  return mentionKey ? `${body}|@${mentionKey}` : body;
+}
+
 export function messageDedupeKey(sender, content) {
-  const text = compactText(content || "", 160).toLowerCase();
+  // 身份/去重：走 At 规范化，避免同句因 mention 位置拆成两条
+  const text = normalizeMessageOutlineForMatch(content);
   return `${String(sender || "").trim().toLowerCase()}|${text}`;
 }
 
+/** 未完成会话 openIndex 键：umo|sender|normalizeOutline */
+export function conversationKeyFrom({ umo = "", senderName = "", messageOutline = "" } = {}) {
+  const outlineKey = normalizeMessageOutlineForMatch(messageOutline);
+  if (!outlineKey) return "";
+  const sender = String(senderName || "").trim().toLowerCase();
+  const channel = String(umo || "").trim().toLowerCase();
+  // 至少要有发送者或通道，避免仅正文过宽粘连
+  if (!sender && !channel) return "";
+  return `${channel}|${sender}|${outlineKey}`;
+}
+
 function splitSessionMessageKey(session) {
-  const text = compactText(session?.messageOutline || "", 160);
+  const text = normalizeMessageOutlineForMatch(session?.messageOutline || "");
   if (!text) return "";
-  return messageDedupeKey(session?.senderName, text);
+  return `${String(session?.senderName || "").trim().toLowerCase()}|${text}`;
+}
+
+function sessionConversationKey(session) {
+  if (!session) return "";
+  if (session.conversationKey) return session.conversationKey;
+  return conversationKeyFrom({
+    umo: session.umo,
+    senderName: session.senderName,
+    messageOutline: session.messageOutline,
+  });
 }
 
 function sessionStartMs(session) {
@@ -629,8 +672,11 @@ function dedupeSessionMessageEvents(eventIds, eventById, removedEventIds) {
   eventIds.forEach((id) => {
     const event = eventById.get(id);
     if (!event) return;
-    if (event.type === "message_in" && event.messageKey) {
-      const key = `${event.type}:${event.messageKey}`;
+    // message_in / persona：同 key 只留一条，避免双 span 入站各打一次
+    if ((event.type === "message_in" || event.type === "persona") && (event.messageKey || event.detail)) {
+      const key = event.type === "message_in"
+        ? `${event.type}:${event.messageKey || event.detail}`
+        : `${event.type}:${compactText(event.detail || "", 80)}`;
       if (seen.has(key)) {
         removedEventIds.add(id);
         return;
@@ -1597,6 +1643,10 @@ export function buildTraceInsights(entries) {
     .filter(Boolean)
     .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
   const sessions = new Map();
+  // spanId → session：同 span 续写 O(1)
+  const spanIndex = new Map();
+  // conversationKey → 未完成 session：入站即归属，不靠事后 merge
+  const openByConversation = new Map();
   const events = [];
   const toolCalls = [];
   const newestTraceTs = Math.max(0, ...traceEntries.map((entry) => entry.timestamp || entry.trace?.time || 0));
@@ -1604,6 +1654,66 @@ export function buildTraceInsights(entries) {
   const slowToolMs = state.ui.slowToolMs || DEFAULT_SLOW_TOOL_MS;
   const slowSessionMs = state.ui.slowSessionMs || DEFAULT_SLOW_SESSION_MS;
   const runningTimeoutMs = state.ui.runningTimeoutMs || DEFAULT_RUNNING_TIMEOUT_MS;
+
+  function registerSpan(session, spanId) {
+    if (!session || !spanId) return;
+    spanIndex.set(spanId, session);
+    if (session.spanId === spanId) return;
+    const aliases = new Set([...(session.aliasSpanIds || []), spanId].filter(Boolean));
+    aliases.delete(session.spanId);
+    session.aliasSpanIds = [...aliases];
+  }
+
+  function rememberOpenSession(session) {
+    if (!session) return;
+    const key = conversationKeyFrom({
+      umo: session.umo,
+      senderName: session.senderName,
+      messageOutline: session.messageOutline,
+    });
+    if (!key) return;
+    const prevKey = session.conversationKey || "";
+    if (prevKey && prevKey !== key && openByConversation.get(prevKey) === session) {
+      openByConversation.delete(prevKey);
+    }
+    session.conversationKey = key;
+    if (session.status === "complete" || session.status === "error" || session.status === "stale") {
+      if (openByConversation.get(key) === session) openByConversation.delete(key);
+      return;
+    }
+    openByConversation.set(key, session);
+  }
+
+  function closeOpenSession(session) {
+    if (!session) return;
+    const key = session.conversationKey || sessionConversationKey(session);
+    if (key && openByConversation.get(key) === session) openByConversation.delete(key);
+  }
+
+  function findOpenSessionForTrace(trace, ts) {
+    const key = conversationKeyFrom({
+      umo: trace.umo,
+      senderName: trace.senderName,
+      messageOutline: trace.messageOutline,
+    });
+    if (!key) return null;
+    const open = openByConversation.get(key);
+    if (!open) return null;
+    if (open.status === "complete" || open.status === "error" || open.status === "stale") {
+      openByConversation.delete(key);
+      return null;
+    }
+    const openStart = sessionStartMs(open);
+    const entryTs = Number(ts || 0);
+    if (openStart && entryTs && Math.abs(entryTs - openStart) > SPLIT_SESSION_MERGE_WINDOW_MS) {
+      return null;
+    }
+    // umo 双侧冲突拒绝（conversationKey 已含 umo；此处防空 key 降级）
+    const openUmo = String(open.umo || "").trim();
+    const entryUmo = String(trace.umo || "").trim();
+    if (openUmo && entryUmo && openUmo !== entryUmo) return null;
+    return open;
+  }
 
   function pushEvent(event) {
     const normalized = {
@@ -1634,69 +1744,110 @@ export function buildTraceInsights(entries) {
   function ensureSession(entry) {
     const trace = entry.trace || {};
     const spanId = trace.spanId || entry.id;
+    const ts = entry.timestamp || trace.time || 0;
     const hasMessageInTrace = trace.action === "message_in"
       || Boolean(trace.senderName || trace.umo || trace.messageOutline);
-    let session = sessions.get(spanId);
-    if (!session) {
-      session = {
-        spanId,
-        startTs: entry.timestamp || trace.time || 0,
-        lastTs: entry.timestamp || trace.time || 0,
-        senderName: trace.senderName || "",
-        umo: trace.umo || "",
-        messageOutline: trace.messageOutline || "",
-        personaId: "",
-        status: "running",
-        response: "",
-        durationMs: null,
-        generationMs: null,
-        wallMs: null,
-        timeToFirstTokenMs: null,
-        tokenUsage: {},
-        reasoningContent: "",
-        reasoningLogEntryId: "",
-        reasoningTs: null,
-        reasoningTokens: null,
-        reasoningSource: "",
-        reasoningCompletionId: "",
-        providerId: "",
-        model: "",
-        enteredAgentFlow: false,
-        hasMessageInTrace,
-        tools: [],
-        events: [],
-      };
-      sessions.set(spanId, session);
-      pushSessionEvent(session, {
-        id: eventKey(spanId, "message_in", entry),
-        timestamp: entry.timestamp || trace.time || 0,
-        spanId,
-        type: "message_in",
-        title: trace.senderName ? `收到 ${trace.senderName} 的消息` : "收到消息",
-        detail: compactText(trace.messageOutline || "消息内容未记录", 180),
-        meta: trace.umo || "",
-        raw: entry.raw,
-        sensitive: true,
-        sensitiveMeta: true,
-        messageKey: messageDedupeKey(trace.senderName, trace.messageOutline),
-        evidence: evidenceFromEntry(entry, `trace:${trace.action || "message_in"}`, "trace", "high"),
-      });
+
+    // 1) 同 span 续写
+    let session = spanIndex.get(spanId) || sessions.get(spanId);
+    if (session) {
+      session.lastTs = Math.max(session.lastTs || 0, ts || 0);
+      if (trace.senderName) session.senderName = trace.senderName;
+      if (trace.umo) session.umo = trace.umo;
+      if (trace.messageOutline) {
+        // 展示：保留更完整的一份 outline
+        const prev = String(session.messageOutline || "");
+        const next = String(trace.messageOutline || "");
+        if (!prev || next.length >= prev.length) session.messageOutline = next;
+      }
+      if (hasMessageInTrace) session.hasMessageInTrace = true;
+      rememberOpenSession(session);
+      return session;
     }
-    session.lastTs = Math.max(session.lastTs || 0, entry.timestamp || trace.time || 0);
-    if (trace.senderName) session.senderName = trace.senderName;
-    if (trace.umo) session.umo = trace.umo;
-    if (trace.messageOutline) session.messageOutline = trace.messageOutline;
-    if (hasMessageInTrace) session.hasMessageInTrace = true;
+
+    // 2) 不同 span：入站归属到未完成同 conversationKey 会话
+    const open = findOpenSessionForTrace(trace, ts);
+    if (open) {
+      registerSpan(open, spanId);
+      open.lastTs = Math.max(open.lastTs || 0, ts || 0);
+      if (trace.senderName) open.senderName = trace.senderName;
+      if (trace.umo) open.umo = trace.umo;
+      if (trace.messageOutline) {
+        const prev = String(open.messageOutline || "");
+        const next = String(trace.messageOutline || "");
+        if (!prev || next.length >= prev.length) open.messageOutline = next;
+      }
+      if (hasMessageInTrace) open.hasMessageInTrace = true;
+      // 挂载 alias：不重复合成 message_in
+      rememberOpenSession(open);
+      return open;
+    }
+
+    // 3) 新建：从第一条 trace 起就是唯一 session 对象
+    session = {
+      spanId,
+      aliasSpanIds: [],
+      startTs: ts || 0,
+      lastTs: ts || 0,
+      senderName: trace.senderName || "",
+      umo: trace.umo || "",
+      messageOutline: trace.messageOutline || "",
+      conversationKey: conversationKeyFrom({
+        umo: trace.umo,
+        senderName: trace.senderName,
+        messageOutline: trace.messageOutline,
+      }),
+      personaId: "",
+      status: "running",
+      response: "",
+      durationMs: null,
+      generationMs: null,
+      wallMs: null,
+      timeToFirstTokenMs: null,
+      tokenUsage: {},
+      reasoningContent: "",
+      reasoningLogEntryId: "",
+      reasoningTs: null,
+      reasoningTokens: null,
+      reasoningSource: "",
+      reasoningCompletionId: "",
+      providerId: "",
+      model: "",
+      enteredAgentFlow: false,
+      hasMessageInTrace,
+      tools: [],
+      events: [],
+    };
+    sessions.set(spanId, session);
+    registerSpan(session, spanId);
+    rememberOpenSession(session);
+    pushSessionEvent(session, {
+      id: eventKey(spanId, "message_in", entry),
+      timestamp: ts,
+      spanId,
+      type: "message_in",
+      title: trace.senderName ? `收到 ${trace.senderName} 的消息` : "收到消息",
+      detail: compactText(trace.messageOutline || "消息内容未记录", 180),
+      meta: trace.umo || "",
+      raw: entry.raw,
+      sensitive: true,
+      sensitiveMeta: true,
+      messageKey: messageDedupeKey(trace.senderName, trace.messageOutline),
+      evidence: evidenceFromEntry(entry, `trace:${trace.action || "message_in"}`, "trace", "high"),
+    });
     return session;
   }
 
   function mergeSessionIntoTarget(source, target, eventById, removedEventIds) {
+    // 安全网：乱序/缺字段时补折叠；主路径已在 ensureSession 入站归属
     const aliasSpanIds = new Set([
       ...(target.aliasSpanIds || []),
       source.spanId,
       ...(source.aliasSpanIds || []),
     ].filter(Boolean));
     target.aliasSpanIds = [...aliasSpanIds];
+    registerSpan(target, source.spanId);
+    (source.aliasSpanIds || []).forEach((id) => registerSpan(target, id));
 
     const startTs = mergeTimestampMin(target.startTs, source.startTs);
     const lastTs = mergeTimestampMax(target.lastTs, source.lastTs);
@@ -1708,6 +1859,7 @@ export function buildTraceInsights(entries) {
     if (!target.umo && source.umo) target.umo = source.umo;
     if (!target.messageOutline && source.messageOutline) target.messageOutline = source.messageOutline;
     if (!target.personaId && source.personaId) target.personaId = source.personaId;
+    if (!target.conversationKey && source.conversationKey) target.conversationKey = source.conversationKey;
     if (!target.reasoningContent && source.reasoningContent) {
       target.reasoningContent = source.reasoningContent;
       target.reasoningLogEntryId = source.reasoningLogEntryId || "";
@@ -1755,8 +1907,11 @@ export function buildTraceInsights(entries) {
       ...(source.events || []),
     ], eventById);
     target.events = dedupeSessionMessageEvents(sortedEventIds, eventById, removedEventIds);
+    closeOpenSession(source);
+    rememberOpenSession(target);
   }
 
+  /** 安全网：补扫仍分裂的 pre→agent；主路径不依赖此步 */
   function mergeSplitSessions() {
     const eventById = new Map(events.map((event) => [event.id, event]));
     const removedEventIds = new Set();
@@ -1765,6 +1920,8 @@ export function buildTraceInsights(entries) {
 
     allSessions.forEach((source) => {
       if (!source.hasMessageInTrace || source.enteredAgentFlow || source.status !== "running") return;
+      // 已被入站归属挂到别人名下的不会再以独立 session 存在
+      if (!sessions.has(source.spanId)) return;
       const target = targets
         .filter((candidate) => canMergeSplitSession(source, candidate))
         .sort((a, b) => {
@@ -1775,6 +1932,7 @@ export function buildTraceInsights(entries) {
       if (!target) return;
       mergeSessionIntoTarget(source, target, eventById, removedEventIds);
       sessions.delete(source.spanId);
+      closeOpenSession(source);
     });
 
     if (removedEventIds.size) {
@@ -1864,17 +2022,25 @@ export function buildTraceInsights(entries) {
 
     if (action === "sel_persona") {
       session.personaId = trace.personaId || "";
-      pushSessionEvent(session, {
-        id: eventKey(spanId, "persona", entry),
-        timestamp: ts,
-        spanId,
-        type: "persona",
-        title: "选择聊天规则",
-        detail: trace.personaId || "未记录规则 ID",
-        meta: trace.personaToolCount == null ? "" : `${trace.personaToolCount} 个可用工具`,
-        raw: entry.raw,
-        evidence: evidenceFromEntry(entry, "trace:sel_persona", "trace", "high"),
+      const personaDetail = trace.personaId || "未记录规则 ID";
+      // 同会话重复 sel_persona（双 span）只记一次
+      const hasPersona = (session.events || []).some((eventId) => {
+        const ev = events.find((item) => item.id === eventId);
+        return ev?.type === "persona" && compactText(ev.detail || "", 80) === compactText(personaDetail, 80);
       });
+      if (!hasPersona) {
+        pushSessionEvent(session, {
+          id: eventKey(spanId, "persona", entry),
+          timestamp: ts,
+          spanId,
+          type: "persona",
+          title: "选择聊天规则",
+          detail: personaDetail,
+          meta: trace.personaToolCount == null ? "" : `${trace.personaToolCount} 个可用工具`,
+          raw: entry.raw,
+          evidence: evidenceFromEntry(entry, "trace:sel_persona", "trace", "high"),
+        });
+      }
       return;
     }
 
@@ -1995,6 +2161,7 @@ export function buildTraceInsights(entries) {
       }
       // durationMs 兼容字段 = 总耗时（墙钟优先）
       session.durationMs = session.wallMs ?? session.generationMs ?? null;
+      closeOpenSession(session);
       const genMs = session.generationMs;
       pushSessionEvent(session, {
         id: eventKey(spanId, "message_out", entry),
@@ -2041,6 +2208,7 @@ export function buildTraceInsights(entries) {
         session.wallMs = Math.max(0, session.lastTs - session.startTs);
         session.durationMs = session.wallMs ?? session.generationMs ?? null;
       }
+      closeOpenSession(session);
       pushSessionEvent(session, {
         id: eventKey(spanId, "error", entry),
         timestamp: ts,
@@ -2064,6 +2232,12 @@ export function buildTraceInsights(entries) {
   attachPlainReasoningToSessions();
   hydrateAndPersistReasoningSticky();
   markStaleSessions([...sessions.values()], now, runningTimeoutMs);
+  // stale 收口后从 openIndex 摘除，避免同文案粘到旧会话
+  [...sessions.values()].forEach((session) => {
+    if (session.status === "complete" || session.status === "error" || session.status === "stale") {
+      closeOpenSession(session);
+    }
+  });
 
   // 收口：stale 也补 wallMs；durationMs 统一为墙钟优先
   [...sessions.values()].forEach((session) => {
