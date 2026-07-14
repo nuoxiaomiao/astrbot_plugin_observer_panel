@@ -11,6 +11,7 @@ import {
   METHOD_MODULE_LABELS,
   PLUG_MODULE_LABELS,
   MODULE_PREFIX_LABELS,
+  PLUGIN_DISPLAY_NAMES,
   TRACE_ACTION_LABELS,
   EVENT_TYPES,
 } from "../config.js?v=20260709-stream4";
@@ -167,7 +168,7 @@ export function compactPluginName(value) {
   if (!token) return "";
   let match = token.match(/^astrbot_plugin_([^.]+)(?:\.|$)/i);
   if (match) return match[1];
-  match = raw.match(/(?:插件|plugin)[：:\s]*([A-Za-z0-9_\-.]+)/i);
+  match = raw.match(/(?:^|[^A-Za-z0-9_])(?:插件|plugin)[：:\s]+([A-Za-z0-9_\-.]+)/i);
   if (match) {
     const name = match[1].replace(/^astrbot_plugin_/i, "").replace(/\.main$/i, "").trim();
     if (name) return name;
@@ -190,17 +191,19 @@ export function pluginModuleGroup(value, raw) {
   if (/^astrbot$/i.test(name)) {
     return moduleGroup("core:astrbot", "AstrBot 核心", "module-core", raw || value);
   }
-  return moduleGroup(`plugin:${name}`, `插件: ${name}`, "module-plugin", raw || value);
+  const key = String(name).toLowerCase().replace(/^_+/, "");
+  const display = PLUGIN_DISPLAY_NAMES[key] || humanizeModuleWord(String(name).replace(/^_+/, ""));
+  return moduleGroup(`plugin:${key}`, `插件: ${display}`, "module-plugin", raw || value);
 }
 
 export function pluginGroupFromMessage(message) {
   const text = String(message || "");
   const match = text.match(/\b(?:plugin|hook\([^)]*\))\s*-\u003e\s*([A-Za-z0-9_.-]+)(?:\s*-\s*([A-Za-z0-9_.:-]+))?/i);
   if (match) return pluginModuleGroup(match[1], match[0]);
-  const zhMatch = text.match(/(?:插件|plugin)[：:\s]*([A-Za-z0-9_\-.]+)/i);
-  if (zhMatch) return pluginModuleGroup(zhMatch[1], zhMatch[0]);
   const bracketMatch = text.match(/\[([^\]]*astrbot_plugin_[^\]]*)\]/i);
   if (bracketMatch) return pluginModuleGroup(bracketMatch[1], bracketMatch[0]);
+  const zhMatch = text.match(/(?:^|[^A-Za-z0-9_])(?:插件|plugin)[：:\s]+([A-Za-z0-9_\-.]+)/i);
+  if (zhMatch) return pluginModuleGroup(zhMatch[1], zhMatch[0]);
   return null;
 }
 
@@ -376,8 +379,9 @@ export function normalizeModuleGroup(entry) {
   // 形如 meme_manager.main / spectrecore.main 的插件模块
   if (/^[a-z0-9_]+(?:\.[a-z0-9_]+)+$/i.test(lower) && !lower.startsWith("module:")) {
     const head = lower.split(".")[0];
-    if (/plugin|manager|meme|spectre|heart|memory|living/i.test(head)) {
-      return moduleGroup(`plugin:${head}`, `插件: ${humanizeModuleWord(head)}`, "module-plugin", rawToken);
+    if (PLUGIN_DISPLAY_NAMES[head] || /plugin|manager|meme|spectre|heart|memory|living|relationship|period|poke|output|gitee|anysearch|bili/i.test(head)) {
+      const display = PLUGIN_DISPLAY_NAMES[head] || humanizeModuleWord(head);
+      return moduleGroup(`plugin:${head}`, `插件: ${display}`, "module-plugin", rawToken);
     }
   }
 
@@ -1396,6 +1400,161 @@ export function isPlainDecorateLog(entry) {
   return PLAIN_DECORATE_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+// ---------------------------------------------------------------------------
+// 已装插件 plain 事件：优先标签 / 模块路径，避免过宽中文
+// ---------------------------------------------------------------------------
+
+function plainEntryText(entry) {
+  return `${entry.moduleName || ""} ${entry.message || ""} ${entry.summary || ""} ${entry.raw || ""}`;
+}
+
+function isPlugScope(entry) {
+  return String(entry.scope || "").toLowerCase() === "plug";
+}
+
+const PLAIN_DEBOUNCE_PATTERNS = [
+  /astrbot_plugin_debounce/i,
+  /\[Debounce\]/i,
+  /完整概率\s*:\s*[\d.]+\s*\|\s*判定\s*:/i,
+];
+
+export function isPlainDebounceLog(entry) {
+  if (entry.trace) return false;
+  return PLAIN_DEBOUNCE_PATTERNS.some((pattern) => pattern.test(plainEntryText(entry)));
+}
+
+const PLAIN_MESSAGE_MERGE_PATTERNS = [
+  /astrbot_plugin_nuoxiaomiao(?:_guard)?/i,
+  /\[糯小喵\]\s*(?:merge|merged|dropped dialogue|on_llm_request blocked)/i,
+  /\[糯小喵\]\s*merge\s+(?:started|append|release)/i,
+];
+
+export function isPlainMessageMergeLog(entry) {
+  if (entry.trace) return false;
+  const text = plainEntryText(entry);
+  // 糯小喵的 meme 转 GIF 等噪声不记为 merge 事件
+  if (/converted static meme|cleaned temp meme/i.test(text) && !/merge|dropped dialogue|blocked/i.test(text)) {
+    return false;
+  }
+  if (/astrbot_plugin_nuoxiaomiao/i.test(entry.moduleName || "") || /\[糯小喵\]/i.test(text)) {
+    return /merge|dropped dialogue|blocked|on_llm_request/i.test(text);
+  }
+  return PLAIN_MESSAGE_MERGE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+const PLAIN_HEARTFLOW_PATTERNS = [
+  /astrbot_plugin_heartflow/i,
+  /心流触发主动回复|心流设置唤醒标志|心流判断不通过|小参数模型判断成功/i,
+  /冷却中，距上次回复还有|机器人回复已写入缓冲区/i,
+];
+
+export function isPlainHeartflowLog(entry) {
+  if (entry.trace) return false;
+  return PLAIN_HEARTFLOW_PATTERNS.some((pattern) => pattern.test(plainEntryText(entry)));
+}
+
+const PLAIN_MEME_PATTERNS = [
+  /meme_manager(?:\.|$)/i,
+  /\[meme_manager\]/i,
+];
+
+export function isPlainMemeLog(entry) {
+  if (entry.trace) return false;
+  return PLAIN_MEME_PATTERNS.some((pattern) => pattern.test(plainEntryText(entry)));
+}
+
+const PLAIN_CONTEXT_COMPACT_PATTERNS = [
+  /AstrNa\s*已压缩/i,
+  /AstrNa\s*已优化身份元数据/i,
+  /group_chat_context_optimizer/i,
+  /modules\.identity_metadata/i,
+];
+
+export function isPlainContextCompactLog(entry) {
+  if (entry.trace) return false;
+  return PLAIN_CONTEXT_COMPACT_PATTERNS.some((pattern) => pattern.test(plainEntryText(entry)));
+}
+
+const PLAIN_OUTPUT_PIPELINE_PATTERNS = [
+  /\[Splitter\]/i,
+  /智能引用/i,
+  /step\.split/i,
+  /core\.send_tracker/i,
+];
+
+export function isPlainOutputPipelineLog(entry) {
+  if (entry.trace) return false;
+  const text = plainEntryText(entry);
+  // 核心 pipeline.scheduler 留给 pipeline 事件；出站仅 Plug 或明确标签
+  if (/pipeline\.scheduler/i.test(text)) return false;
+  if (isPlugScope(entry) && (/core\.pipeline/i.test(entry.moduleName || "") || PLAIN_OUTPUT_PIPELINE_PATTERNS.some((p) => p.test(text)))) {
+    return true;
+  }
+  return PLAIN_OUTPUT_PIPELINE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+const PLAIN_GROUP_ANALYSIS_PATTERNS = [
+  /\[群分析插件\]/i,
+  /\[群分析相册\]/i,
+  /\[分发器\]/i,
+  /qq_group_daily_analysis/i,
+  /自动分析任务执行|定时分析报告|增量分析/i,
+];
+
+export function isPlainGroupAnalysisLog(entry) {
+  if (entry.trace) return false;
+  return PLAIN_GROUP_ANALYSIS_PATTERNS.some((pattern) => pattern.test(plainEntryText(entry)));
+}
+
+const PLAIN_PROACTIVE_PATTERNS = [
+  /spectrecore(?:\.|$)/i,
+  /收到大模型回复喵|检测到读空气标记/i,
+  /读空气/i,
+];
+
+export function isPlainProactiveLog(entry) {
+  if (entry.trace) return false;
+  const text = plainEntryText(entry);
+  // 避免把「主动回复率」聊天正文误标（需 module 或明确标签）
+  if (/spectrecore/i.test(entry.moduleName || "") || /收到大模型回复喵|检测到读空气标记|读空气标记/i.test(text)) {
+    return true;
+  }
+  return false;
+}
+
+const PLAIN_RELATIONSHIP_PATTERNS = [
+  /astrbot_plugin_yeli_relationship/i,
+  /\[关系本\]/i,
+];
+
+export function isPlainRelationshipLog(entry) {
+  if (entry.trace) return false;
+  return PLAIN_RELATIONSHIP_PATTERNS.some((pattern) => pattern.test(plainEntryText(entry)));
+}
+
+const PLAIN_TOOL_AUTH_PATTERNS = [
+  /tool_auth|工具鉴权|鉴权拒绝|无权限调用工具/i,
+];
+
+export function isPlainToolAuthLog(entry) {
+  if (entry.trace) return false;
+  return PLAIN_TOOL_AUTH_PATTERNS.some((pattern) => pattern.test(plainEntryText(entry)));
+}
+
+function makePlainEvent(entry, type, title, options = {}) {
+  return {
+    id: `plain:${entry.id}`,
+    timestamp: entryTimeMs(entry),
+    type,
+    title,
+    detail: compactText(entry.summary || entry.message || entry.raw, options.detailLen || 220),
+    meta: [entry.scope, entry.moduleName].filter(Boolean).join(" | "),
+    raw: entry.raw,
+    sensitive: options.sensitive ?? false,
+    evidence: evidenceFromEntry(entry, options.evidenceSource || `plain:${type}`, "plain", options.confidence || "medium"),
+  };
+}
+
 export function plainLogEvent(entry) {
   if (entry.trace) return null;
   const eventBus = parseEventBusMessage(entry);
@@ -1415,7 +1574,39 @@ export function plainLogEvent(entry) {
     };
   }
 
-  // 新增：记忆操作、唤醒检查、Pipeline Hook、Agent 阶段、Pipeline 调度
+  // 插件诊断事件：放在通用 hook/pipeline/warn 之前，避免被吞
+  if (isPlainDebounceLog(entry)) {
+    return makePlainEvent(entry, "debounce", "防抖判定", { sensitive: false, confidence: "high" });
+  }
+  if (isPlainMessageMergeLog(entry)) {
+    return makePlainEvent(entry, "message_merge", "消息合并", { sensitive: true, confidence: "high" });
+  }
+  if (isPlainHeartflowLog(entry)) {
+    return makePlainEvent(entry, "heartflow", "心流判定", { sensitive: true, confidence: "high" });
+  }
+  if (isPlainMemeLog(entry)) {
+    return makePlainEvent(entry, "meme", "表情匹配", { sensitive: false, confidence: "medium" });
+  }
+  if (isPlainContextCompactLog(entry)) {
+    return makePlainEvent(entry, "context_compact", "上下文压缩", { sensitive: false, confidence: "high" });
+  }
+  if (isPlainOutputPipelineLog(entry)) {
+    return makePlainEvent(entry, "output_pipeline", "出站管线", { sensitive: false, confidence: "medium" });
+  }
+  if (isPlainGroupAnalysisLog(entry)) {
+    return makePlainEvent(entry, "group_analysis", "群分析任务", { sensitive: false, confidence: "medium" });
+  }
+  if (isPlainProactiveLog(entry)) {
+    return makePlainEvent(entry, "proactive", "主动回复", { sensitive: true, confidence: "medium" });
+  }
+  if (isPlainRelationshipLog(entry)) {
+    return makePlainEvent(entry, "relationship", "关系本", { sensitive: true, confidence: "medium" });
+  }
+  if (isPlainToolAuthLog(entry)) {
+    return makePlainEvent(entry, "tool_auth", "工具鉴权", { sensitive: false, confidence: "high" });
+  }
+
+  // 记忆操作、唤醒检查、Pipeline Hook、Agent 阶段、Pipeline 调度
   if (isPlainMemoryLog(entry)) {
     return {
       id: `plain:${entry.id}`,
@@ -1813,6 +2004,7 @@ export function buildTraceInsights(entries) {
       reasoningCompletionId: "",
       providerId: "",
       model: "",
+      modelRequest: null,
       enteredAgentFlow: false,
       hasMessageInTrace,
       tools: [],
@@ -1884,6 +2076,14 @@ export function buildTraceInsights(entries) {
     }
     if (target.timeToFirstTokenMs == null && source.timeToFirstTokenMs != null) {
       target.timeToFirstTokenMs = source.timeToFirstTokenMs;
+    }
+    // modelRequest：优先较新 prepare；否则补齐缺失
+    if (source.modelRequest) {
+      const sourceTs = Number(source.modelRequest.prepareTs || 0);
+      const targetTs = Number(target.modelRequest?.prepareTs || 0);
+      if (!target.modelRequest || sourceTs >= targetTs) {
+        target.modelRequest = source.modelRequest;
+      }
     }
 
     if (Array.isArray(source.tools) && source.tools.length) {
@@ -2049,6 +2249,21 @@ export function buildTraceInsights(entries) {
       session.enteredAgentFlow = true;
       session.providerId = trace.providerId || session.providerId;
       session.model = trace.model || session.model;
+      // prepare 快照：日志有 system_prompt + 工具名，无完整 messages[]
+      const systemPrompt = String(trace.systemPrompt || "").trim() ? String(trace.systemPrompt) : "";
+      const toolNames = Array.isArray(trace.toolNames) ? trace.toolNames.filter(Boolean) : [];
+      if (systemPrompt || toolNames.length || trace.providerId || trace.model) {
+        session.modelRequest = {
+          systemPrompt,
+          toolNames,
+          stream: trace.stream ?? null,
+          providerId: trace.providerId || session.providerId || "",
+          model: trace.model || session.model || "",
+          messageOutline: trace.messageOutline || session.messageOutline || "",
+          prepareTs: ts,
+          logEntryId: entry.id || "",
+        };
+      }
       pushSessionEvent(session, {
         id: eventKey(spanId, "model_start", entry),
         timestamp: ts,
@@ -2056,7 +2271,11 @@ export function buildTraceInsights(entries) {
         type: "model_start",
         title: "开始生成回复",
         detail: compactText(trace.messageOutline || session.messageOutline || "进入模型请求阶段", 180),
-        meta: [trace.providerId, trace.model].filter(Boolean).join(" | "),
+        meta: [
+          [trace.providerId, trace.model].filter(Boolean).join(" | "),
+          systemPrompt ? `系统提示 ${systemPrompt.length} 字` : "",
+          toolNames.length ? `工具 ${toolNames.length}` : "",
+        ].filter(Boolean).join(" · "),
         raw: entry.raw,
         sensitive: true,
         evidence: evidenceFromEntry(entry, "trace:astr_agent_prepare", "trace", "high"),

@@ -440,8 +440,8 @@ function sessionDetailSignature(session) {
     toolsSig,
     // 完成态再纳入耗时/token，避免 live 抖动
     session.status === "complete" || session.status === "error"
-      ? `${session.wallMs || session.durationMs || ""}:${session.generationMs || ""}:${session.timeToFirstTokenMs || ""}:${JSON.stringify(session.tokenUsage || {})}`
-      : "live",
+      ? `${session.wallMs || session.durationMs || ""}:${session.generationMs || ""}:${session.timeToFirstTokenMs || ""}:${JSON.stringify(session.tokenUsage || {})}:${session.modelRequest?.systemPrompt?.length || 0}:${(session.modelRequest?.toolNames || []).length}`
+      : `live:${session.modelRequest?.systemPrompt?.length || 0}:${(session.modelRequest?.toolNames || []).length}`,
   ];
 }
 
@@ -760,8 +760,166 @@ function buildReasoningDetails(step) {
   return details;
 }
 
+function modelRequestMetaText(req) {
+  if (!req) return "";
+  const tools = Array.isArray(req.toolNames) ? req.toolNames.length : 0;
+  const promptLen = String(req.systemPrompt || "").length;
+  return joinMeta([
+    [req.providerId, req.model].filter(Boolean).join(" / "),
+    tools ? `工具 ${formatNumber(tools)} 个` : "无工具名列表",
+    promptLen ? `系统提示 ${formatNumber(promptLen)} 字` : "无系统提示",
+    req.stream === true ? "stream" : (req.stream === false ? "非流式" : ""),
+  ]);
+}
+
+function hasModelRequestPayload(req) {
+  if (!req) return false;
+  return Boolean(String(req.systemPrompt || "").trim() || (Array.isArray(req.toolNames) && req.toolNames.length));
+}
+
+/** 模型请求快照正文（prepare：system_prompt + 工具名；无完整 messages） */
+function fillModelRequestContent(host, req, { summaryLabel = "查看请求快照" } = {}) {
+  host.replaceChildren();
+  if (state.privacyMode) {
+    host.className = host.className.replace(/\bsession-model-request-details\b/g, "").trim();
+    if (!host.classList.contains("session-model-request-hidden")) {
+      host.classList.add("session-model-request-hidden");
+    }
+    host.textContent = "隐私模式已隐藏模型请求内容";
+    return;
+  }
+  host.classList.remove("session-model-request-hidden");
+  if (!host.classList.contains("session-model-request-details")) {
+    // details 节点由外层创建
+  }
+
+  const note = document.createElement("p");
+  note.className = "session-model-request-note";
+  note.textContent = "日志仅记录 prepare 快照（系统提示 + 工具名），不含完整 messages 多轮历史。";
+
+  const promptTitle = document.createElement("h4");
+  promptTitle.className = "session-model-request-section-title";
+  promptTitle.textContent = "系统提示";
+  const pre = document.createElement("pre");
+  pre.className = "session-model-request-prompt";
+  pre.textContent = String(req?.systemPrompt || "").trim() || "（未记录 system_prompt）";
+
+  const toolsTitle = document.createElement("h4");
+  toolsTitle.className = "session-model-request-section-title";
+  toolsTitle.textContent = `可用工具（${(req?.toolNames || []).length}）`;
+  const toolsWrap = document.createElement("div");
+  toolsWrap.className = "session-model-request-tools";
+  const names = Array.isArray(req?.toolNames) ? req.toolNames : [];
+  if (!names.length) {
+    const empty = document.createElement("span");
+    empty.className = "session-model-request-tool-empty";
+    empty.textContent = "未记录工具列表";
+    toolsWrap.appendChild(empty);
+  } else {
+    names.forEach((name) => {
+      const chip = document.createElement("span");
+      chip.className = "session-model-request-tool";
+      chip.textContent = name;
+      toolsWrap.appendChild(chip);
+    });
+  }
+
+  // 若 host 是 details，先放 summary
+  if (host.tagName === "DETAILS") {
+    let summary = host.querySelector(":scope > summary");
+    if (!summary) {
+      summary = document.createElement("summary");
+      host.appendChild(summary);
+    }
+    summary.textContent = summaryLabel;
+    const body = document.createElement("div");
+    body.className = "session-model-request-body";
+    body.append(note, promptTitle, pre, toolsTitle, toolsWrap);
+    // 清掉旧 body 节点
+    [...host.children].forEach((child) => {
+      if (child.tagName !== "SUMMARY") child.remove();
+    });
+    host.appendChild(body);
+  } else {
+    host.append(note, promptTitle, pre, toolsTitle, toolsWrap);
+  }
+}
+
+function buildModelRequestDetails(step) {
+  if (state.privacyMode) {
+    const hidden = document.createElement("p");
+    hidden.className = "session-flow-body session-model-request-hidden";
+    hidden.textContent = "隐私模式已隐藏模型请求内容";
+    return hidden;
+  }
+  const details = document.createElement("details");
+  details.className = "session-flow-body session-model-request-details";
+  if (step.modelRequestDetailKey) bindDetailsState(details, step.modelRequestDetailKey);
+  fillModelRequestContent(details, step.modelRequest, { summaryLabel: "查看请求快照" });
+  return details;
+}
+
+function buildLiveModelRequestPanel(session) {
+  const req = session?.modelRequest;
+  if (!hasModelRequestPayload(req) && !req) return null;
+
+  const section = document.createElement("section");
+  section.className = "session-live-model-request";
+  const heading = document.createElement("h3");
+  heading.textContent = "发给模型的请求";
+  section.appendChild(heading);
+
+  if (state.privacyMode) {
+    const hidden = document.createElement("p");
+    hidden.className = "session-model-request-hidden";
+    hidden.textContent = "隐私模式已隐藏模型请求内容";
+    section.appendChild(hidden);
+    return section;
+  }
+
+  if (!hasModelRequestPayload(req)) {
+    const empty = document.createElement("p");
+    empty.className = "session-model-request-note";
+    empty.textContent = "尚未记录 prepare 请求快照。";
+    section.appendChild(empty);
+    return section;
+  }
+
+  const details = document.createElement("details");
+  details.className = "session-model-request-details";
+  const detailKeyValue = detailKey("session-model-request-live", session.spanId, req.prepareTs || req.logEntryId || "");
+  bindDetailsState(details, detailKeyValue);
+  fillModelRequestContent(details, req, {
+    summaryLabel: modelRequestMetaText(req) || "查看请求快照",
+  });
+  section.appendChild(details);
+  return section;
+}
+
+function patchLiveModelRequestPanel(host, session) {
+  if (!host) return;
+  let panel = host.querySelector(".session-live-model-request");
+  const req = session?.modelRequest;
+  const shouldShow = Boolean(req && (hasModelRequestPayload(req) || sessionIsLive(session)));
+  if (!shouldShow) {
+    if (panel) panel.remove();
+    return;
+  }
+  const next = buildLiveModelRequestPanel(session);
+  if (!next) {
+    if (panel) panel.remove();
+    return;
+  }
+  if (panel) panel.replaceWith(next);
+  else {
+    const liveWrap = host.querySelector(".session-live-wrap") || host;
+    liveWrap.appendChild(next);
+  }
+}
+
 function buildFlowBody(step) {
   if (step.kind === "reasoning") return buildReasoningDetails(step);
+  if (step.kind === "model-request") return buildModelRequestDetails(step);
   const body = document.createElement("p");
   body.className = "session-flow-body";
   if (step.liveClass && step.liveBody) body.classList.add("session-live-copy", step.liveClass);
@@ -772,15 +930,32 @@ function buildFlowBody(step) {
 function patchFlowBody(row, step) {
   const body = row.querySelector(".session-flow-body");
   const needsReasoning = step.kind === "reasoning";
+  const needsModelRequest = step.kind === "model-request";
   const hasReasoningBody = body?.classList.contains("session-reasoning-details") || body?.classList.contains("session-reasoning-hidden");
+  const hasModelRequestBody = body?.classList.contains("session-model-request-details") || body?.classList.contains("session-model-request-hidden");
   const reasoningPrivacyMismatch = needsReasoning && (
     (state.privacyMode && !body?.classList.contains("session-reasoning-hidden"))
     || (!state.privacyMode && !body?.classList.contains("session-reasoning-details"))
   );
+  const modelRequestPrivacyMismatch = needsModelRequest && (
+    (state.privacyMode && !body?.classList.contains("session-model-request-hidden"))
+    || (!state.privacyMode && !body?.classList.contains("session-model-request-details"))
+  );
   const reasoningKeyMismatch = needsReasoning
     && !state.privacyMode
     && body?.dataset.boundKey !== (step.reasoningDetailKey || "");
-  if (!body || (needsReasoning && (!hasReasoningBody || reasoningPrivacyMismatch || reasoningKeyMismatch)) || (!needsReasoning && hasReasoningBody)) {
+  const modelRequestKeyMismatch = needsModelRequest
+    && !state.privacyMode
+    && body?.dataset.boundKey !== (step.modelRequestDetailKey || "");
+  const wrongKind = (needsReasoning && !hasReasoningBody)
+    || (needsModelRequest && !hasModelRequestBody)
+    || (!needsReasoning && hasReasoningBody)
+    || (!needsModelRequest && hasModelRequestBody)
+    || reasoningPrivacyMismatch
+    || modelRequestPrivacyMismatch
+    || reasoningKeyMismatch
+    || modelRequestKeyMismatch;
+  if (!body || wrongKind) {
     const next = buildFlowBody(step);
     if (body) body.replaceWith(next);
     else row.querySelector(".session-flow-main")?.appendChild(next);
@@ -797,6 +972,14 @@ function patchFlowBody(row, step) {
     if (pre && pre.textContent !== (step.reasoningContent || "")) {
       pre.textContent = step.reasoningContent || "";
     }
+    return;
+  }
+  if (needsModelRequest) {
+    if (state.privacyMode) {
+      body.textContent = "隐私模式已隐藏模型请求内容";
+      return;
+    }
+    fillModelRequestContent(body, step.modelRequest, { summaryLabel: "查看请求快照" });
     return;
   }
   body.textContent = step.body || "--";
@@ -1013,6 +1196,26 @@ function buildSessionJourney(session, insights) {
       kind: "request",
       logEntryId: eventLogEntryId(modelStartEvent),
     });
+
+    // 发给模型的请求（prepare 快照）：有 system_prompt / 工具名时展示
+    const req = session.modelRequest;
+    if (req && hasModelRequestPayload(req)) {
+      const reqTs = req.prepareTs || modelStartEvent?.timestamp || requestStartTs;
+      steps.push({
+        key: "model-request",
+        title: "发给模型的请求",
+        body: "",
+        modelRequest: req,
+        modelRequestDetailKey: detailKey("session-model-request", session.spanId, req.logEntryId || req.prepareTs || ""),
+        timeLabel: reqTs ? formatTime(reqTs) : "--",
+        meta: modelRequestMetaText(req),
+        badgeLabel: "快照",
+        badgeKind: "debug",
+        state: "done",
+        kind: "model-request",
+        logEntryId: req.logEntryId || eventLogEntryId(modelStartEvent) || "",
+      });
+    }
   }
 
   // 4. 工具调用：按时间顺序展示已记录的工具，可能多轮
@@ -1495,6 +1698,10 @@ function renderSessionDetail(session, insights) {
       const liveCard = buildLiveStatusCard(session, insights);
       liveWrap.append(liveTitle, liveCard);
       journey.append(liveWrap);
+      if (session.modelRequest && hasModelRequestPayload(session.modelRequest)) {
+        const panel = buildLiveModelRequestPanel(session);
+        if (panel) journey.appendChild(panel);
+      }
       host.appendChild(journey);
       if (!sameSession) playSessionDetailEnter(host);
       return;
@@ -1504,6 +1711,7 @@ function renderSessionDetail(session, insights) {
     if (overview) patchSessionOverview(overview, session);
     const liveCard = host.querySelector(".session-live-card");
     if (liveCard) patchLiveStatusCard(liveCard, session, insights, null, Boolean(detail));
+    patchLiveModelRequestPanel(host, session);
     return;
   }
 

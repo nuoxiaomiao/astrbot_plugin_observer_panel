@@ -1,5 +1,26 @@
 # 更新日志
 
+## v0.4.8 - 插件日志类型扩展 (2026-07-13)
+
+### 日志识别
+- 新增 plain 事件：`debounce` / `message_merge` / `heartflow` / `meme` / `context_compact` / `output_pipeline` / `group_analysis` / `proactive` / `relationship` / `tool_auth`。
+- 重要事件纳入防抖、消息合并、心流、上下文压缩、工具鉴权。
+- 模块图：`PLUGIN_DISPLAY_NAMES` + 前缀表，Debounce / Heartflow / 糯小喵 / meme / SpectreCore 等不再大面积落「其他」。
+- 摘要：判定概率、合并释放、冷却、分段、关系本等短文案。
+- 回归：`scripts/test-plugin-log-types.mjs` + 原 plain 识别用例。
+
+---
+
+## v0.4.7 - 会话可查看模型请求快照 (2026-07-13)
+
+### 会话
+- 解析 `astr_agent_prepare` 的 `system_prompt` / 工具名列表 / stream，写入 `session.modelRequest`。
+- 完成态旅程增加「发给模型的请求」可折叠步骤；进行中详情同步展示。
+- UI 标明：日志仅为 prepare 快照，**不含**完整 `messages` 多轮历史。
+- 隐私模式隐藏请求正文。
+
+---
+
 ## v0.4.6 - 会话入站身份统一 (2026-07-13)
 
 ### 会话

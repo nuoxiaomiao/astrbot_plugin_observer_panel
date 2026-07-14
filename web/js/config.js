@@ -42,7 +42,23 @@ export const MODULE_CHART_LIMIT = 10;
 export const TRACE_ANALYSIS_ENTRY_LIMIT = 2500;
 /** 分析窗裁剪时优先保留的 plain 思考候选条数 */
 export const REASONING_CANDIDATE_KEEP = 100;
-export const IMPORTANT_EVENT_TYPES = new Set(["tool_call", "tool_result", "message_out", "provider_response", "memory", "waking", "message_cleanup", "slow", "warn", "error"]);
+export const IMPORTANT_EVENT_TYPES = new Set([
+  "tool_call",
+  "tool_result",
+  "message_out",
+  "provider_response",
+  "memory",
+  "waking",
+  "message_cleanup",
+  "debounce",
+  "message_merge",
+  "heartflow",
+  "context_compact",
+  "tool_auth",
+  "slow",
+  "warn",
+  "error",
+]);
 
 // 与后端 LOG_TIMESTAMP_RE 保持一致，用于从日志行解析时间戳
 export const LOG_TIMESTAMP_RE = /(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)/;
@@ -93,6 +109,46 @@ export const PLUG_MODULE_LABELS = {
   "event_handler_modules.message_utils": "插件模块: 消息工具",
   "retrieval.hybrid_retriever": "插件模块: 混合检索",
   "astrbot.group_chat_context": "插件模块: 群聊上下文",
+  "modules.group_chat_context_optimizer": "插件: AstrNa 上下文",
+  "modules.identity_metadata": "插件: AstrNa 身份",
+  "step.split": "插件: 输出管道分段",
+  "core.send_tracker": "插件: 输出管道发送",
+  "astrbot_plugin_debounce.main": "插件: 防抖 Debounce",
+  "astrbot_plugin_heartflow.main": "插件: 心流 Heartflow",
+  "astrbot_plugin_nuoxiaomiao.main": "插件: 糯小喵",
+  "meme_manager.main": "插件: 表情包",
+  "spectrecore.main": "插件: SpectreCore",
+  "astrbot_plugin_yeli_relationship.main": "插件: 关系本",
+  "astrbot_plugin_irmia_devkit.main": "插件: irmia 开发箱",
+  "astrbot_plugin_pokepro.main": "插件: 戳一戳",
+  "astrbot_plugin_period.main": "插件: Period 情绪",
+  "astrbot_plugin_gitee_aiimg.main": "插件: 文生图",
+};
+
+/** plugin shortName → 中文展示（normalizeModuleGroup / pluginModuleGroup） */
+export const PLUGIN_DISPLAY_NAMES = {
+  debounce: "防抖 Debounce",
+  heartflow: "心流 Heartflow",
+  nuoxiaomiao: "糯小喵",
+  nuoxiaomiao_guard: "糯小喵守卫",
+  astrna: "AstrNa",
+  meme_manager: "表情包",
+  spectrecore: "SpectreCore",
+  yeli_relationship: "关系本",
+  irmia_devkit: "irmia 开发箱",
+  irmia_task_scaffold: "任务脚手架",
+  pokepro: "戳一戳",
+  period: "Period 情绪",
+  gitee_aiimg: "文生图",
+  outputpro: "输出管道",
+  livingmemory: "长期记忆",
+  anysearch: "AnySearch",
+  bili_resolver: "B站解析",
+  qq_group_daily_analysis: "群日常分析",
+  restart: "重启",
+  observer_panel: "观察面板",
+  llm_qqgrouptools: "群管工具",
+  palette: "WebUI 美化",
 };
 
 /** 按模块前缀归类（normalizeModuleGroup 优先查表） */
@@ -109,6 +165,16 @@ export const MODULE_PREFIX_LABELS = {
   "storage.": { label: "插件模块: 存储", className: "module-plugin", keyPrefix: "storage" },
   "event_handler_modules.": { label: "插件模块: 事件处理", className: "module-plugin", keyPrefix: "event_handler" },
   "retrieval.": { label: "插件模块: 检索", className: "module-plugin", keyPrefix: "retrieval" },
+  "modules.": { label: "插件: AstrNa 模块", className: "module-plugin", keyPrefix: "astrna_modules" },
+  "step.": { label: "插件: 输出管道步骤", className: "module-plugin", keyPrefix: "output_step" },
+  "meme_manager.": { label: "插件: 表情包", className: "module-plugin", keyPrefix: "meme" },
+  "spectrecore.": { label: "插件: SpectreCore", className: "module-plugin", keyPrefix: "spectre" },
+  "astrbot_plugin_debounce.": { label: "插件: 防抖 Debounce", className: "module-plugin", keyPrefix: "plugin:debounce" },
+  "astrbot_plugin_heartflow.": { label: "插件: 心流 Heartflow", className: "module-plugin", keyPrefix: "plugin:heartflow" },
+  "astrbot_plugin_nuoxiaomiao.": { label: "插件: 糯小喵", className: "module-plugin", keyPrefix: "plugin:nuoxiaomiao" },
+  "astrbot_plugin_nuoxiaomiao_guard.": { label: "插件: 糯小喵守卫", className: "module-plugin", keyPrefix: "plugin:nuoxiaomiao_guard" },
+  "astrbot_plugin_yeli_relationship.": { label: "插件: 关系本", className: "module-plugin", keyPrefix: "plugin:yeli_relationship" },
+  "astrbot_plugin_outputpro.": { label: "插件: 输出管道", className: "module-plugin", keyPrefix: "plugin:outputpro" },
   "aiocqhttp.": { label: "平台: aiocqhttp", className: "module-platform", keyPrefix: "platform:aiocqhttp" },
   "qqofficial.": { label: "平台: QQ 官方", className: "module-platform", keyPrefix: "platform:qqofficial" },
 };
@@ -157,6 +223,16 @@ export const EVENT_TYPES = {
   message_cleanup: { label: "消息清理", badge: "info", className: "event-cleanup" },
   memory: { label: "记忆操作", badge: "info", className: "event-memory" },
   waking: { label: "唤醒检查", badge: "info", className: "event-waking" },
+  debounce: { label: "防抖判定", badge: "warn", className: "event-debounce" },
+  message_merge: { label: "消息合并", badge: "info", className: "event-message-merge" },
+  heartflow: { label: "心流判定", badge: "info", className: "event-heartflow" },
+  meme: { label: "表情匹配", badge: "debug", className: "event-meme" },
+  context_compact: { label: "上下文压缩", badge: "info", className: "event-context-compact" },
+  output_pipeline: { label: "出站管线", badge: "debug", className: "event-output-pipeline" },
+  group_analysis: { label: "群分析任务", badge: "info", className: "event-group-analysis" },
+  proactive: { label: "主动回复", badge: "debug", className: "event-proactive" },
+  tool_auth: { label: "工具鉴权", badge: "warn", className: "event-tool-auth" },
+  relationship: { label: "关系本", badge: "debug", className: "event-relationship" },
   hook: { label: "Pipeline Hook", badge: "debug", className: "event-hook" },
   decorate: { label: "结果装饰", badge: "debug", className: "event-decorate" },
   agent_stage: { label: "Agent 阶段", badge: "debug", className: "event-agent-stage" },

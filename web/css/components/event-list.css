@@ -101,6 +101,46 @@
   border-left-color: var(--cleanup-bright);
 }
 
+.event-debounce {
+  border-left-color: var(--warn-bright);
+}
+
+.event-message-merge {
+  border-left-color: var(--info-bright);
+}
+
+.event-heartflow {
+  border-left-color: var(--memory-bright);
+}
+
+.event-meme {
+  border-left-color: var(--debug-bright);
+}
+
+.event-context-compact {
+  border-left-color: var(--info-bright);
+}
+
+.event-output-pipeline {
+  border-left-color: var(--debug-bright);
+}
+
+.event-group-analysis {
+  border-left-color: var(--info-bright);
+}
+
+.event-proactive {
+  border-left-color: var(--accent-bright);
+}
+
+.event-tool-auth {
+  border-left-color: var(--warn-bright);
+}
+
+.event-relationship {
+  border-left-color: var(--memory-bright);
+}
+
 .event-hook,
 .event-agent-stage,
 .event-pipeline,

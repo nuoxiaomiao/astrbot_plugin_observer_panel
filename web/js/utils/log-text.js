@@ -187,6 +187,80 @@ export function summarizePlainLog(message, raw, meta = {}) {
     return "Pipeline 完成";
   }
 
+  // Debounce 判定
+  if (/astrbot_plugin_debounce/i.test(moduleName) || /\[Debounce\]/i.test(sourceText) || /完整概率\s*:/i.test(sourceText)) {
+    const score = (sourceText.match(/完整概率\s*:\s*([\d.]+)/i) || [])[1] || "";
+    const decision = (sourceText.match(/判定\s*:\s*([^\n|]+)/i) || [])[1] || "";
+    if (score || decision) {
+      return compactText(`防抖 · ${[score && `p=${score}`, decision && decision.trim()].filter(Boolean).join(" · ")}`, 520);
+    }
+    const debounceAction = (sourceText.match(/\[Debounce\]\s*([^\n:]+)/i) || [])[1] || "";
+    if (debounceAction) return compactText(`防抖 · ${debounceAction.trim()}`, 520);
+  }
+
+  // 糯小喵 merge / drop
+  if (/\[糯小喵\]/i.test(sourceText) || /astrbot_plugin_nuoxiaomiao/i.test(moduleName)) {
+    if (/dropped dialogue/i.test(sourceText)) {
+      const sender = (sourceText.match(/sender=([^\s]+)/i) || [])[1] || "";
+      return compactText(sender ? `糯小喵 · 丢弃对话 · ${sender}` : "糯小喵 · 丢弃对话", 520);
+    }
+    if (/merge release/i.test(sourceText)) {
+      const parts = (sourceText.match(/parts=(\d+)/i) || [])[1] || "";
+      return compactText(parts ? `糯小喵 · 合并释放 · parts=${parts}` : "糯小喵 · 合并释放", 520);
+    }
+    if (/merge started/i.test(sourceText)) return "糯小喵 · 开始合并";
+    if (/merge append/i.test(sourceText)) return "糯小喵 · 追加合并";
+    if (/merged event submitted/i.test(sourceText)) return "糯小喵 · 提交合并事件";
+  }
+
+  // Heartflow
+  if (/astrbot_plugin_heartflow/i.test(moduleName) || /心流触发|心流判断|冷却中，距上次回复/i.test(sourceText)) {
+    if (/冷却中/.test(sourceText)) {
+      const sec = (sourceText.match(/还有\s*([\d.]+)\s*s/i) || [])[1] || "";
+      return compactText(sec ? `心流 · 冷却 ${sec}s` : "心流 · 冷却中", 520);
+    }
+    if (/心流触发主动回复/.test(sourceText)) {
+      const score = (sourceText.match(/评分:([\d.]+)/) || [])[1] || "";
+      return compactText(score ? `心流 · 触发主动回复 · ${score}` : "心流 · 触发主动回复", 520);
+    }
+    if (/机器人回复已写入缓冲区/.test(sourceText)) return "心流 · 写入缓冲区";
+    if (/心流判断不通过/.test(sourceText)) return "心流 · 不通过";
+  }
+
+  // meme_manager
+  if (/\[meme_manager\]/i.test(sourceText) || /meme_manager/i.test(moduleName)) {
+    const stage = (sourceText.match(/\[meme_manager\]\s*([^\n:]+)/i) || [])[1] || "";
+    if (stage) return compactText(`表情 · ${stage.trim()}`, 520);
+  }
+
+  // AstrNa 压缩 / 身份
+  if (/AstrNa\s*已压缩/i.test(sourceText)) return "AstrNa · 压缩群聊上下文";
+  if (/AstrNa\s*已优化身份元数据/i.test(sourceText)) return "AstrNa · 优化身份元数据";
+  if (/AstrNa\s*已启用优化/i.test(sourceText)) return compactText(sourceText.replace(/^.*?AstrNa/, "AstrNa"), 520);
+
+  // 出站管线
+  if (/\[Splitter\]/i.test(sourceText)) {
+    const segs = (sourceText.match(/分为\s*(\d+)\s*段/) || [])[1] || "";
+    return compactText(segs ? `出站分段 · ${segs} 段` : "出站分段", 520);
+  }
+  if (/智能引用/.test(sourceText)) return compactText(`出站 · ${previewText(sourceText, 80)}`, 520);
+
+  // 关系本
+  if (/\[关系本\]/i.test(sourceText) || /astrbot_plugin_yeli_relationship/i.test(moduleName)) {
+    const body = sourceText.replace(/^.*?\[关系本\]\s*/i, "").trim();
+    return compactText(body ? `关系本 · ${previewText(body, 80)}` : "关系本", 520);
+  }
+
+  // SpectreCore 读空气 / 回复
+  if (/收到大模型回复喵/i.test(sourceText)) return "SpectreCore · 收到模型回复";
+  if (/检测到读空气标记/i.test(sourceText)) return "SpectreCore · 读空气拦截";
+
+  // 群分析
+  if (/\[群分析插件\]/i.test(sourceText)) {
+    const body = sourceText.replace(/^.*?\[群分析插件\]\s*/i, "").trim();
+    return compactText(body ? `群分析 · ${previewText(body, 80)}` : "群分析", 520);
+  }
+
   // hook(Event) -> plugin - method
   const hookMatch = sourceText.match(/hook\(([^)]+)\)\s*->\s*([A-Za-z0-9_.-]+)(?:\s*-\s*([A-Za-z0-9_.:-]+))?/i);
   if (hookMatch) {

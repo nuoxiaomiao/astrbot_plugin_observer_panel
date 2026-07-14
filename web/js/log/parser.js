@@ -195,6 +195,36 @@ export function timeToFirstTokenMsFromStats(stats) {
   return Math.round(raw * 1000);
 }
 
+export function normalizeToolNames(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (item == null) return "";
+        if (typeof item === "string") return item.trim();
+        if (typeof item === "object") {
+          const name = item.name || item.id || item.tool || "";
+          return String(name || "").trim();
+        }
+        return String(item).trim();
+      })
+      .filter(Boolean);
+  }
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) return [];
+    // 兼容 JSON 数组字符串 / 逗号分隔
+    if (text.startsWith("[")) {
+      try {
+        return normalizeToolNames(JSON.parse(text));
+      } catch (err) {
+        // fall through
+      }
+    }
+    return text.split(/[,，\n]/).map((part) => part.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 export function buildTraceInfo(data) {
   if (!data || typeof data !== "object") return null;
   const fields = safeObject(data.fields);
@@ -205,6 +235,8 @@ export function buildTraceInfo(data) {
   const resultText = fields.tool_result == null ? "" : String(fields.tool_result);
   // generationMs：模型 stats 生成段；durationMs 兼容旧字段，同 generationMs
   const generationMs = durationMsFromStats(stats);
+  const systemPrompt = fields.system_prompt == null ? "" : String(fields.system_prompt);
+  const toolNames = normalizeToolNames(fields.tools);
   return {
     action: data.action || data.name || "",
     spanId: data.span_id || "",
@@ -229,6 +261,9 @@ export function buildTraceInfo(data) {
       fields.reasoningContent,
       fields.reasonContent,
     ),
+    systemPrompt,
+    toolNames,
+    stream: fields.stream == null ? null : Boolean(fields.stream),
     generationMs,
     durationMs: generationMs,
     timeToFirstTokenMs: timeToFirstTokenMsFromStats(stats),

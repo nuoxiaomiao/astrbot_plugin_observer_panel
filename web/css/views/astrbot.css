@@ -726,6 +726,15 @@ body.anim-off .session-detail.is-session-enter .session-flow-wrap {
   background: rgba(193, 156, 255, 0.045);
 }
 
+.session-flow-step.model-request .session-flow-dot {
+  background: var(--info-bright);
+}
+
+.session-flow-step.model-request .session-flow-main {
+  border-color: rgba(90, 155, 212, 0.18);
+  background: rgba(90, 155, 212, 0.04);
+}
+
 .session-flow-head {
   display: flex;
   justify-content: space-between;
@@ -807,6 +816,95 @@ body.anim-off .session-detail.is-session-enter .session-flow-wrap {
 
 .session-reasoning-hidden {
   color: var(--muted);
+}
+
+.session-model-request-details {
+  white-space: normal;
+}
+
+.session-model-request-details > summary {
+  color: var(--info-bright);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.session-model-request-body {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.session-model-request-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.session-model-request-section-title {
+  margin: 4px 0 0;
+  color: var(--muted-dark);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.session-model-request-prompt {
+  margin: 0;
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid rgba(90, 155, 212, 0.16);
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text);
+  padding: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.session-model-request-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.session-model-request-tool {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 2px 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.session-model-request-tool-empty,
+.session-model-request-hidden {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.session-live-model-request {
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+}
+
+.session-live-model-request > h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .session-flow-meta {
